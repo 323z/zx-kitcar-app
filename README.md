@@ -1,19 +1,20 @@
 # Citroen ZX Kit Car Rally Simulator v6.0
 
-A complete port of the C++ Windows console racing simulator to HTML5 Canvas + Cordova Android APK.
+256×256 pixel canvas racing simulator with virtual buttons, built for Android 4.4.4+ via Cordova.
 
 ## Features
 
-- 🏎️ Full racing physics (engine torque curve, 6-speed sequential gearbox, clutch)
-- 🔥 Overboost system (8s boost + 25s cooldown)
-- 🌡️ Engine cooling system with auto fan
-- 📊 Complete telemetry (RPM, speed, G-force, wheel spin, suspension)
-- 🏁 3-lap races with lap timing and best lap tracking
-- 🤖 3 AI opponents with basic racing AI
-- 🎮 Virtual on-screen buttons (touch + keyboard)
-- 📱 256×256 pixel canvas (authentic retro feel)
-- 🔊 Web Audio API engine sound
-- 🎨 Multiple camera modes (chase / hood / orbit)
+- 6-speed sequential gearbox with clutch
+- Engine torque curve (Gaussian model, peak 5500rpm)
+- Overboost system (8s active + 25s cooldown)
+- Cooling system with auto fan
+- 0-100 km/h timer
+- ABS + Handbrake (rear-wheel lock)
+- 3-lap race with AI opponents
+- 3 camera modes
+- Engine sound (Web Audio API)
+- Drift smoke effects
+- Virtual buttons (touch + keyboard)
 
 ## Local Development
 
@@ -23,54 +24,54 @@ npm start
 # Open http://localhost:8080
 ```
 
-## Build APK via GitHub Actions
+## Controls
 
-1. Push this repo to GitHub
-2. Go to **Actions → Build Android APK → Run workflow**
-3. Wait ~5-8 minutes
-4. Download Debug or Release APK from **Artifacts**
-5. Install on **Android 4.4.4+** device
+| Key | Action |
+|-----|--------|
+| Arrow Up / W | Throttle |
+| Arrow Down / S | Brake |
+| Arrow Left / A | Steer Left |
+| Arrow Right / D | Steer Right |
+| C | Clutch |
+| H / Space | Handbrake |
+| Q | Shift Down |
+| E | Shift Up |
+| B | Overboost |
+| V | Camera Toggle |
+| Enter | Start Race |
+| R | Reset |
+
+## GitHub Actions → APK
+
+1. Push to GitHub repo
+2. Settings → Actions → General → Workflow permissions = Read and write
+3. Actions → Build Android APK → Run workflow
+4. Wait 5-8 min → Download Debug APK
+5. Install on Android 4.4.4+ device
+
+## Build Pipeline
+
+```
+Checkout → Node 18 → JDK 17 (SDK) + JDK 8 (Cordova)
+→ Gradle 4.10.3 → Pillow → Android SDK → Cordova
+→ Generate Icons → Patch Gradle (remove jcenter)
+→ Build Debug + Release APK → Upload Artifacts
+```
 
 ## Project Structure
 
 ```
-├── index.html              # Standalone HTML version
-├── game.js                 # Full game engine (physics + rendering + input)
-├── server.js               # Node.js local dev server
-├── package.json            # npm config + Cordova dep
-├── config.xml              # Cordova Android config
-├── www/                    # Cordova web assets
+├── index.html          # Standalone HTML version
+├── game.js             # Full game engine (480 lines)
+├── server.js           # Node.js local server
+├── package.json        # npm config
+├── config.xml          # Cordova config
+├── www/                # Cordova web assets
 │   ├── index.html
 │   └── game.js
 └── .github/workflows/
-    └── build-apk.yml      # Complete CI/CD pipeline
+    └── build-apk.yml   # Full CI pipeline
 ```
-
-## Controls
-
-| Action | Keyboard | Touch Button |
-|--------|-----------|--------------|
-| Steer Left | ← / A | ◀ |
-| Steer Right | → / D | ▶ |
-| Accelerate | ↑ / W | ▲ |
-| Brake | ↓ / S | ▼ |
-| Handbrake | Space | H |
-| Gear Up | Shift | L |
-| Gear Down | Ctrl | R |
-| Overboost | O | O |
-| ABS Toggle | B | A |
-| Camera | C | — |
-| Reset | R | — |
-
-## Technical Details
-
-- **Engine**: 1.8L 16V, peak torque 285 Nm at 6800 RPM
-- **Gearbox**: 6-speed sequential (ratios: 3.8→0.75)
-- **Final Drive**: 4.1:1
-- **Wheel Radius**: 0.3m
-- **Mass**: 980 kg
-- **Top Speed**: ~210 km/h
-- **0-100 km/h**: ~12.8s (normal) / ~10.5s (overboost)
 
 ## License
 

@@ -1,54 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<title>Citroen ZX Kit Car Sim v6.0</title>
+<title>Citroen ZX Kit Car Rally Sim v6.0</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    width: 100%; height: 100%;
-    background: #0a0a0a;
-    overflow: hidden;
-    touch-action: none;
-    -webkit-user-select: none;
-    user-select: none;
-    font-family: 'Courier New', monospace;
-  }
-  #gameContainer {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 100%; height: 100%;
-    background: #0a0a0a;
-  }
-  canvas {
-    image-rendering: pixelated;
-    image-rendering: -moz-crisp-edges;
-    image-rendering: crisp-edges;
-    border: 2px solid #333;
-    background: #000;
-    max-width: 100%;
-    max-height: 100%;
-  }
-  #info {
-    position: fixed;
-    bottom: 2px;
-    right: 4px;
-    color: #444;
-    font-size: 9px;
-    z-index: 100;
-  }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#111; display:flex; justify-content:center; align-items:center; height:100vh; overflow:hidden; }
+canvas { image-rendering:pixelated; image-rendering:crisp-edges; border:2px solid #333; }
 </style>
 </head>
 <body>
-<div id="gameContainer">
-  <canvas id="gameCanvas" width="256" height="256"></canvas>
-</div>
-<div id="info">ZX Kit Car Sim v6.0</div>
+<canvas id="game" width="256" height="256"></canvas>
 <script src="game.js"></script>
 </body>
 </html>
