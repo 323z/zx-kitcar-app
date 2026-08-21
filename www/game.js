@@ -1,450 +1,427 @@
-/* =========================================================
-   Citroen ZX Kit Car Rally Simulator v6.0
-   Complete game engine — physics, rendering, input, UI
-   Target: 256x256 canvas, virtual buttons, Android 4.4.4+
-   ========================================================= */
+// ============================================================
+//  Citroen ZX Kit Car Rally Simulator v6.0
+//  256x256 canvas, virtual keypad, full physics
+// ============================================================
 
 (function () {
   'use strict';
 
-  // ── Canvas & Context ──────────────────────────────────
-  var canvas = document.getElementById('game');
+  var canvas = document.getElementById('gameCanvas');
   var ctx = canvas.getContext('2d');
   var W = 256, H = 256;
 
-  // ── Splash screen logic ───────────────────────────────
-  var splash = document.getElementById('splash');
-  var progressBar = document.getElementById('progress-bar');
-  var splashStatus = document.getElementById('splash-status');
-  var bootSteps = [
-    'Initializing engine...', 'Loading textures...',
-    'Calibrating physics...', 'Mounting turbo...',
-    'Ready to race!'
-  ];
-  var bootIdx = 0;
-  function bootStep() {
-    if (bootIdx < bootSteps.length) {
-      splashStatus.textContent = bootSteps[bootIdx];
-      progressBar.style.width = ((bootIdx + 1) / bootSteps.length * 100) + '%';
-      bootIdx++;
-      setTimeout(bootStep, 300);
-    } else {
-      setTimeout(function () { splash.style.display = 'none'; }, 400);
-    }
-  }
-  setTimeout(bootStep, 200);
-
-  // ── Input: Virtual Buttons + Keyboard ────────────────
-  var input = { up: false, down: false, left: false, right: false,
-                clutch: false, handbrake: false, boost: false };
-
-  function bindBtn(id, key) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    var press = function (e) { e.preventDefault(); input[key] = true;  el.classList.add('active'); };
-    var rel   = function (e) { e.preventDefault(); input[key] = false; el.classList.remove('active'); };
-    el.addEventListener('touchstart', press, {passive:false});
-    el.addEventListener('touchend',   rel,  {passive:false});
-    el.addEventListener('touchcancel', rel,  {passive:false});
-    el.addEventListener('mousedown',  press);
-    el.addEventListener('mouseup',    rel);
-    el.addEventListener('mouseleave', rel);
-  }
-  bindBtn('btn-up', 'up');
-  bindBtn('btn-down', 'down');
-  bindBtn('btn-left', 'left');
-  bindBtn('btn-right', 'right');
-  bindBtn('btn-clutch', 'clutch');
-  bindBtn('btn-handbrake', 'handbrake');
-  bindBtn('btn-boost', 'boost');
-
-  document.addEventListener('keydown', function (e) {
-    switch (e.key) {
-      case 'ArrowUp': case 'w': input.up = true; break;
-      case 'ArrowDown': case 's': input.down = true; break;
-      case 'ArrowLeft': case 'a': input.left = true; break;
-      case 'ArrowRight': case 'd': input.right = true; break;
-      case 'c': case 'C': input.clutch = true; break;
-      case ' ': input.handbrake = true; break;
-      case 'b': case 'B': input.boost = true; break;
-    }
-  });
-  document.addEventListener('keyup', function (e) {
-    switch (e.key) {
-      case 'ArrowUp': case 'w': input.up = false; break;
-      case 'ArrowDown': case 's': input.down = false; break;
-      case 'ArrowLeft': case 'a': input.left = false; break;
-      case 'ArrowRight': case 'd': input.right = false; break;
-      case 'c': case 'C': input.clutch = false; break;
-      case ' ': input.handbrake = false; break;
-      case 'b': case 'B': input.boost = false; break;
-    }
-  });
-
-  // ── Car Physics Constants ─────────────────────────────
-  var GEAR_RATIOS = [-3.5, 0, 3.727, 2.364, 1.681, 1.312, 1.0, 0.793];
-  var FINAL_DRIVE = 4.125;
-  var WHEEL_RADIUS = 0.3;
-  var MASS = 1200;
-  var DRAG_COEF = 0.42;
-  var ROLL_RES = 12;
-  var MAX_ENGINE_TORQUE = 280;
-  var IDLE_RPM = 900;
-  var REDLINE = 7200;
-  var MAX_RPM = 7500;
-  var RPM_PER_SEC = 4000;
-  var SHIFT_UP_RPM = 6500;
-  var SHIFT_DOWN_RPM = 2500;
-  var BOOST_MULT = 1.35;
-  var BOOST_DUR = 8.0;
-  var BOOST_COOLDOWN = 25.0;
-
-  // ── Car State ─────────────────────────────────────────
-  var car = {
-    x: 128, y: 128, angle: 0, speed: 0, rpm: IDLE_RPM,
-    gear: 0, clutch: 1.0, throttle: 0, brake: 0,
-    steering: 0, handbrake: false, boost: false,
-    boostTimer: 0, boostCD: 0, temp: 85, fan: false,
-    odometer: 0, lapTime: 0, bestLap: 0,
-    accelTime: 0, accelStart: 0, measuring: false,
-    onTrack: true, surfaceGrip: 1.0,
-    engineOn: false, starting: false, startTimer: 0
+  // ─── Input ───────────────────────────────────────────
+  var keys = {};
+  var touch = {
+    left: false, right: false, up: false, down: false,
+    lbtn: false, rbtn: false, obtn: false, hbtn: false,
+    sbtn: false, absbtn: false
   };
 
-  // ── Track ─────────────────────────────────────────────
-  var trackW = 40;
-  var checkpoints = [
-    {x:128, y:40}, {x:200, y:60}, {x:220, y:128},
-    {x:200, y:200}, {x:128, y:220}, {x:50, y:200},
-    {x:30, y:128}, {x:50, y:60}
+  document.addEventListener('keydown', function (e) {
+    keys[e.key.toLowerCase()] = true;
+    if (['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(e.key.toLowerCase()) >= 0) e.preventDefault();
+  });
+  document.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
+
+  function isDown(action) {
+    switch (action) {
+      case 'left': return keys['arrowleft'] || keys['a'] || touch.left;
+      case 'right': return keys['arrowright'] || keys['d'] || touch.right;
+      case 'up': return keys['arrowup'] || keys['w'] || touch.up;
+      case 'down': return keys['arrowdown'] || keys['s'] || touch.down;
+      case 'shift': return keys['shift'] || touch.sbtn;
+      case 'space': return keys[' '] || touch.hbtn;
+      case 'o': return keys['o'] || touch.obtn;
+      case 'b': return keys['b'] || touch.absbtn;
+      case 'r': return keys['r'];
+      case 'l': return keys['l'] || touch.lbtn;
+      case 'e': return keys['e'] || touch.rbtn;
+      case 'enter': return keys['enter'];
+      case 'control': return keys['control'];
+    }
+    return false;
+  }
+
+  // ─── Virtual Buttons ────────────────────────────────
+  var btns = [
+    { id:'left',  x:6,  y:200, w:30, h:22, label:'\u25C0', ref:'left' },
+    { id:'right', x:42, y:200, w:30, h:22, label:'\u25B6', ref:'right' },
+    { id:'up',    x:24, y:174, w:30, h:22, label:'\u25B2', ref:'up' },
+    { id:'down',  x:24, y:226, w:30, h:22, label:'\u25BC', ref:'down' },
+    { id:'lbtn',  x:200,y:168, w:22, h:16, label:'L', ref:'lbtn' },
+    { id:'rbtn',  x:226,y:168, w:22, h:16, label:'R', ref:'rbtn' },
+    { id:'obtn',  x:200,y:188, w:22, h:16, label:'O', ref:'obtn' },
+    { id:'hbtn',  x:226,y:188, w:22, h:16, label:'H', ref:'hbtn' },
+    { id:'sbtn',  x:200,y:208, w:22, h:16, label:'S', ref:'sbtn' },
+    { id:'absbtn',x:226,y:208, w:22, h:16, label:'A', ref:'absbtn' },
   ];
-  var cpIdx = 0;
-  var lapCount = 0;
 
-  // ── Engine torque curve (Gaussian) ────────────────────
+  function pointInBtn(px, py, b) { return px>=b.x&&px<=b.x+b.w&&py>=b.y&&py<=b.y+b.h; }
+
+  function updateTouch(e) {
+    for (var k in touch) touch[k] = false;
+    var rect = canvas.getBoundingClientRect();
+    var sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+    var touches = e.touches || e.changedTouches || [];
+    for (var i = 0; i < touches.length; i++) {
+      var tx = (touches[i].clientX - rect.left) * sx;
+      var ty = (touches[i].clientY - rect.top) * sy;
+      for (var j = 0; j < btns.length; j++) {
+        if (pointInBtn(tx, ty, btns[j])) touch[btns[j].ref] = true;
+      }
+    }
+  }
+
+  canvas.addEventListener('touchstart', function(e){e.preventDefault();updateTouch(e);},{passive:false});
+  canvas.addEventListener('touchend', function(e){e.preventDefault();updateTouch(e);},{passive:false});
+  canvas.addEventListener('touchmove', function(e){e.preventDefault();updateTouch(e);},{passive:false});
+  canvas.addEventListener('touchcancel', function(e){for(var k in touch) touch[k]=false;},{passive:false});
+
+  var mouseDown = false;
+  canvas.addEventListener('mousedown', function(e){
+    mouseDown = true;
+    var rect = canvas.getBoundingClientRect();
+    var sx = canvas.width/rect.width, sy = canvas.height/rect.height;
+    var tx=(e.clientX-rect.left)*sx, ty=(e.clientY-rect.top)*sy;
+    for(var j=0;j<btns.length;j++) if(pointInBtn(tx,ty,btns[j])) touch[btns[j].ref]=true;
+  });
+  canvas.addEventListener('mouseup', function(){for(var k in touch) touch[k]=false; mouseDown=false;});
+  canvas.addEventListener('mousemove', function(e){
+    if(!mouseDown) return;
+    var rect = canvas.getBoundingClientRect();
+    var sx = canvas.width/rect.width, sy = canvas.height/rect.height;
+    var tx=(e.clientX-rect.left)*sx, ty=(e.clientY-rect.top)*sy;
+    for(var k in touch) touch[k]=false;
+    for(var j=0;j<btns.length;j++) if(pointInBtn(tx,ty,btns[j])) touch[btns[j].ref]=true;
+  });
+
+  // ─── Car Physics ────────────────────────────────────
+  var car = {
+    x:128, y:80, angle:0, speed:0, gear:0, rpm:800,
+    clutch:1, throttle:0, brake:0, handbrake:false,
+    abs:false, overboost:false, obTimer:0, obCooldown:0,
+    engineTemp:75, fanOn:false, fuel:100, damage:0,
+    lapTime:0, bestLap:999, lastLap:0, lapCount:0,
+    raceTime:0, finishTime:0, pos:0,
+    speedMax:0, accelTime:0,
+    wheelSpin:[0,0,0,0], gForce:0, camMode:0, camAngle:0
+  };
+
+  // ─── Track (procedural oval with bumps) ─────────────
+  var trackW = 48;
+  var trackSegs = [];
+  var TRACK_LEN = 40;
+
+  function generateTrack() {
+    trackSegs = [];
+    for (var i = 0; i < TRACK_LEN; i++) {
+      var a = (i / TRACK_LEN) * Math.PI * 2;
+      var r = 82 + Math.sin(a*3)*22 + Math.cos(a*2)*12;
+      var x = 128 + Math.cos(a)*r;
+      var y = 128 + Math.sin(a)*r;
+      var dx, dy;
+      if (i < TRACK_LEN-1) {
+        var a2 = ((i+1)/TRACK_LEN)*Math.PI*2;
+        dx = (128+Math.cos(a2)*r) - x;
+        dy = (128+Math.sin(a2)*r) - y;
+      } else {
+        dx = trackSegs[0].x - x;
+        dy = trackSegs[0].y - y;
+      }
+      trackSegs.push({x:x, y:y, angle:Math.atan2(dy,dx)});
+    }
+  }
+  generateTrack();
+
+  // ─── Gear & Engine ──────────────────────────────────
+  var gearRatios = [-3.2, 3.8, 2.4, 1.6, 1.2, 0.9, 0.75];
+  var finalDrive = 4.1;
+  var wheelR = 0.3;
+
   function engineTorque(rpm) {
-    var peak = 4200;
-    var sigma = 1800;
-    var t = MAX_ENGINE_TORQUE * Math.exp(-Math.pow(rpm - peak, 2) / (2 * sigma * sigma));
-    return Math.max(0, t);
+    var peak = 6800, tq = 285, sig = 2200;
+    var t = tq * Math.exp(-Math.pow(rpm-peak,2)/(2*sig*sig));
+    if (rpm < 800) t = tq*0.3;
+    if (rpm > 8200) t = 0;
+    return t;
   }
 
-  // ── Push-start (助推启动) ─────────────────────────────
-  function tryPushStart(dt) {
-    if (car.starting) {
-      car.startTimer += dt;
-      car.rpm += 600 * dt;
-      if (car.rpm >= 1200 || car.startTimer > 3.0) {
-        car.starting = false;
-        car.engineOn = true;
-        car.rpm = Math.max(car.rpm, 1200);
-      }
-    } else if (!car.engineOn && car.speed > 2.0 && input.clutch) {
-      car.starting = true;
-      car.startTimer = 0;
-    }
+  // ─── Audio ──────────────────────────────────────────
+  var actx = null, osc = null, gain = null;
+  function initAudio() {
+    try { actx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){}
+  }
+  function updAudio() {
+    if (!actx) return;
+    if (!osc) { osc=actx.createOscillator(); gain=actx.createGain(); osc.type='sawtooth'; osc.connect(gain); gain.connect(actx.destination); gain.gain.value=0.02; osc.start(); }
+    osc.frequency.value = 40 + (car.rpm/8000)*200;
+    gain.gain.value = 0.01 + car.throttle*0.03;
   }
 
-  // ── Transmission ──────────────────────────────────────
-  function updateGear(dt) {
-    if (input.clutch) {
-      // Clutch disengaged — RPM floats
-      car.rpm += (input.up ? 800 : (input.down ? -400 : 0)) * dt * 60;
-      car.rpm = Math.max(IDLE_RPM * 0.6, Math.min(MAX_RPM, car.rpm));
-    } else {
-      // Auto-shift logic
-      if (car.gear > 1 && car.rpm > SHIFT_UP_RPM) {
-        car.gear = Math.min(7, car.gear + 1);
-        car.rpm *= 0.7;
-      } else if (car.gear > 2 && car.rpm < SHIFT_DOWN_RPM) {
-        car.gear = Math.max(1, car.gear - 1);
-        car.rpm *= 1.3;
-      }
+  // ─── Physics ────────────────────────────────────────
+  function updatePhysics() {
+    var dt = 1/30;
+
+    // Shifting
+    if (isDown('shift') && car.clutch > 0.5) { if(car.gear<6) car.gear++; car.clutch=0; }
+    if (isDown('control') && car.clutch > 0.5) { if(car.gear>0) car.gear--; car.clutch=0; }
+    car.clutch = Math.min(1, car.clutch + dt*2);
+
+    // Inputs
+    car.throttle = isDown('up') ? 1 : 0;
+    car.brake = isDown('down') ? 1 : 0;
+    car.handbrake = isDown('space');
+
+    // Overboost
+    if (isDown('o') && car.obCooldown<=0 && car.obTimer<=0) { car.overboost=true; car.obTimer=8; }
+    if (car.obTimer>0) { car.obTimer-=dt; if(car.obTimer<=0){car.overboost=false; car.obCooldown=25;} }
+    if (car.obCooldown>0) car.obCooldown-=dt;
+    car.abs = isDown('b');
+
+    // RPM
+    var tgtRpm = 800 + car.throttle*7000;
+    if (car.gear>0 && car.clutch>0.8) {
+      var wheelRPS = car.speed/(2*Math.PI*wheelR);
+      tgtRpm = wheelRPS*gearRatios[car.gear]*finalDrive*60/(2*Math.PI)*10;
+      tgtRpm = Math.max(800, Math.min(8200, tgtRpm));
     }
+    car.rpm += (tgtRpm - car.rpm)*dt*3;
 
-    // Manual shift (keyboard 1-7)
-    if (input.up && !input.clutch) {
-      // upshift request via rapid clutch
-    }
-  }
+    // Force
+    var tq = engineTorque(car.rpm)*car.throttle*(car.overboost?1.35:1);
+    var force = tq*gearRatios[car.gear]*finalDrive/wheelR*car.clutch;
+    var accel = force/980 - car.speed*car.speed*0.0004 - car.speed*0.02;
+    if (car.brake) accel -= car.speed*0.8;
 
-  // ── Physics update ────────────────────────────────────
-  function updatePhysics(dt) {
-    if (!car.engineOn && !car.starting) {
-      // Engine off — coasting
-      car.speed *= Math.pow(0.98, dt * 60);
-      tryPushStart(dt);
-    } else {
-      car.starting = false;
-    }
-
-    // Throttle / Brake
-    var throttle = input.up ? 1 : 0;
-    var brake = input.down ? 1 : 0;
-    car.throttle = throttle;
-    car.brake = brake;
-
-    // Boost
-    if (car.boostCD > 0) car.boostCD -= dt;
-    if (input.boost && car.boostCD <= 0 && car.boostTimer <= 0) {
-      car.boost = true;
-      car.boostTimer = BOOST_DUR;
-      car.boostCD = BOOST_COOLDOWN;
-    }
-    if (car.boostTimer > 0) {
-      car.boostTimer -= dt;
-      if (car.boostTimer <= 0) car.boost = false;
-    }
-
-    // RPM dynamics
-    if (car.engineOn) {
-      var targetRpm = IDLE_RPM + throttle * (REDLINE - IDLE_RPM);
-      var rpmRate = (targetRpm - car.rpm) * 2.5;
-      car.rpm += rpmRate * dt;
-      if (car.boost) car.rpm = Math.min(MAX_RPM, car.rpm + 800 * dt);
-      car.rpm = Math.max(IDLE_RPM * 0.5, Math.min(MAX_RPM, car.rpm));
-    }
-
-    // Driving force
-    var gearRatio = GEAR_RATIOS[car.gear] || 0;
-    var driveForce = 0;
-    if (car.gear > 0 && !input.clutch) {
-      var wheelRpm = car.rpm * gearRatio * FINAL_DRIVE;
-      var wheelTorque = engineTorque(car.rpm) * gearRatio * FINAL_DRIVE;
-      if (car.boost) wheelTorque *= BOOST_MULT;
-      driveForce = wheelTorque / WHEEL_RADIUS;
-    }
-
-    // Acceleration
-    var accel = driveForce / MASS;
-    if (brake > 0) accel -= 12;
-    accel -= DRAG_COEF * car.speed * car.speed / MASS;
-    accel -= ROLL_RES * car.speed / MASS;
-
-    car.speed += accel * dt;
-    car.speed = Math.max(-8, Math.min(85, car.speed));
+    car.speed = Math.max(0, car.speed + accel*dt*10);
 
     // Steering
-    var steerInput = 0;
-    if (input.left) steerInput -= 1;
-    if (input.right) steerInput += 1;
-    car.steering = steerInput;
+    var steer = (isDown('left')?-1:0) + (isDown('right')?1:0);
+    var sAng = steer*0.6*(1-car.speed/200);
+    car.angle += sAng*dt*(car.handbrake?2.5:1);
 
-    var speedFactor = Math.min(1, car.speed / 20);
-    var turnRate = steerInput * 1.8 * speedFactor;
-    if (input.handbrake) turnRate *= 1.8; // Drift!
-    car.angle += turnRate * dt;
+    // Move
+    car.x += Math.cos(car.angle)*car.speed*dt;
+    car.y += Math.sin(car.angle)*car.speed*dt;
 
-    // Position update
-    var dx = Math.sin(car.angle) * car.speed * dt;
-    var dy = -Math.cos(car.angle) * car.speed * dt;
-    car.x += dx;
-    car.y += dy;
-    car.odometer += Math.sqrt(dx*dx + dy*dy) * 0.01;
-
-    // World wrap (simple)
-    if (car.x < -10) car.x = W + 10;
-    if (car.x > W + 10) car.x = -10;
-    if (car.y < -10) car.y = H + 10;
-    if (car.y > H + 10) car.y = -10;
-
-    // Checkpoint / Lap
-    var cp = checkpoints[cpIdx];
-    var d = Math.sqrt((car.x - cp.x)*(car.x - cp.x) + (car.y - cp.y)*(car.y - cp.y));
-    if (d < 18) {
-      cpIdx = (cpIdx + 1) % checkpoints.length;
-      if (cpIdx === 0) {
-        lapCount++;
-        if (car.lapTime > 0) {
-          if (car.bestLap === 0 || car.lapTime < car.bestLap) car.bestLap = car.lapTime;
-        }
-        car.lapTime = 0;
-      }
+    // Track bounds
+    var idx = Math.floor(car.pos)%TRACK_LEN;
+    var seg = trackSegs[idx];
+    if (seg) {
+      var dx=car.x-seg.x, dy=car.y-seg.y;
+      if (Math.sqrt(dx*dx+dy*dy) > trackW*0.6) { car.speed*=0.98; car.damage+=dt*2; }
     }
-    car.lapTime += dt;
 
-    // 0-100 timing
-    if (car.speed >= 27.78 && !car.measuring) { // 100 km/h ≈ 27.78 m/s
-      car.measuring = true;
-      car.accelTime = car.lapTime; // rough
+    // Progress
+    car.pos += car.speed*dt*0.1;
+    if (car.pos >= TRACK_LEN) {
+      car.pos -= TRACK_LEN;
+      car.lapCount++;
+      car.lastLap = car.lapTime;
+      if (car.lapTime < car.bestLap) car.bestLap = car.lapTime;
+      car.lapTime = 0;
+      if (car.lapCount >= 3) { gameState='finished'; car.finishTime=car.raceTime; }
     }
-    if (car.speed < 5) car.measuring = false;
+    car.lapTime+=dt; car.raceTime+=dt;
 
-    // Cooling system
-    var loadFactor = throttle * (car.speed > 10 ? 1 : 0.5);
-    car.temp += (loadFactor * 8 - (car.temp > 90 ? 6 : 2)) * dt;
-    car.temp = Math.max(70, Math.min(130, car.temp));
-    car.fan = car.temp > 95;
+    // Telemetry
+    car.speedMax = Math.max(car.speedMax, car.speed);
+    car.accelTime += dt;
+    car.gForce = Math.abs(sAng)*car.speed*0.1;
+    for (var w=0;w<4;w++) car.wheelSpin[w] = car.speed*(1+(w<2?0:0.05)*(car.handbrake?2:1));
 
-    updateGear(dt);
+    // Temp
+    car.engineTemp += (car.throttle*0.3-0.1)*dt;
+    car.fanOn = car.engineTemp > 95;
+    if (car.fanOn) car.engineTemp -= 0.2*dt;
+    car.engineTemp = Math.max(60, Math.min(120, car.engineTemp));
+
+    // Fuel
+    car.fuel = Math.max(0, car.fuel - car.throttle*dt*0.5);
+
+    // Camera
+    if (isDown('c')) car.camMode = (car.camMode+1)%3;
+    car.camAngle += sAng*0.5;
   }
 
-  // ── Rendering ─────────────────────────────────────────
+  // ─── Rendering ──────────────────────────────────────
   function draw() {
-    // Sky / background
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, W, H);
-
-    // Ground (rally dirt)
-    ctx.fillStyle = '#3a2e1e';
-    ctx.fillRect(0, 0, W, H);
-
-    // Track (simple oval-ish)
-    ctx.strokeStyle = '#5a4a30';
-    ctx.lineWidth = trackW;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    for (var i = 0; i <= checkpoints.length; i++) {
-      var p = checkpoints[i % checkpoints.length];
-      if (i === 0) ctx.moveTo(p.x, p.y);
-      else ctx.lineTo(p.x, p.y);
-    }
-    ctx.closePath();
-    ctx.stroke();
-
-    // Track edges
-    ctx.strokeStyle = '#ff0';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    for (var j = 0; j <= checkpoints.length; j++) {
-      var q = checkpoints[j % checkpoints.length];
-      if (j === 0) ctx.moveTo(q.x, q.y);
-      else ctx.lineTo(q.x, q.y);
-    }
-    ctx.closePath();
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Checkpoint markers
-    for (var k = 0; k < checkpoints.length; k++) {
-      var cp = checkpoints[k];
-      ctx.fillStyle = (k === cpIdx) ? '#0f0' : '#444';
-      ctx.beginPath();
-      ctx.arc(cp.x, cp.y, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Trees / obstacles
-    var trees = [[80,80],[180,100],[60,180],[200,160],[100,200],[160,40]];
-    for (var t = 0; t < trees.length; t++) {
-      var tx = trees[t][0], ty = trees[t][1];
-      ctx.fillStyle = '#1a3a1a';
-      ctx.beginPath();
-      ctx.arc(tx, ty, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#0a5a0a';
-      ctx.beginPath();
-      ctx.arc(tx-2, ty-2, 5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Car
+    ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,0,W,H);
     ctx.save();
-    ctx.translate(car.x, car.y);
-    ctx.rotate(car.angle);
+    var cx=car.x, cy=car.y;
+    if(car.camMode===1){cx=car.x-Math.cos(car.angle)*20;cy=car.y-Math.sin(car.angle)*20;}
+    if(car.camMode===2){cx=car.x+Math.cos(car.camAngle)*40;cy=car.y+Math.sin(car.camAngle)*40;}
+    ctx.translate(W/2,H/2); ctx.rotate(-car.angle*0.3); ctx.translate(-cx,-cy);
 
-    // Car body
-    ctx.fillStyle = '#cc0';
-    ctx.fillRect(-6, -3, 12, 6);
-    // Car roof
-    ctx.fillStyle = '#aa0';
-    ctx.fillRect(-3, -2, 6, 4);
-    // Wheels
-    ctx.fillStyle = '#111';
-    ctx.fillRect(-5, -4, 3, 2);
-    ctx.fillRect(-5,  2, 3, 2);
-    ctx.fillRect( 2, -4, 3, 2);
-    ctx.fillRect( 2,  2, 3, 2);
-    // Headlights
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(4, -2, 2, 1);
-    ctx.fillRect(4,  1, 2, 1);
-
+    drawTrack();
+    drawAICars();
+    drawPlayerCar();
     ctx.restore();
 
-    // ── HUD ──
-    // RPM bar
-    var rpmPct = (car.rpm - IDLE_RPM) / (MAX_RPM - IDLE_RPM);
-    ctx.fillStyle = '#222';
-    ctx.fillRect(4, H - 22, W - 8, 6);
-    var rpmColor = rpmPct > 0.85 ? '#f00' : (rpmPct > 0.65 ? '#ff0' : '#0f0');
-    ctx.fillStyle = rpmColor;
-    ctx.fillRect(4, H - 22, (W - 8) * rpmPct, 6);
+    drawHUD();
+    drawButtons();
+    if(gameState==='menu') drawMenu();
+    if(gameState==='finished') drawFinish();
+  }
 
-    // Speed (km/h)
-    var speedKmh = Math.round(car.speed * 3.6);
-    ctx.fillStyle = '#fff';
-    ctx.font = '9px monospace';
-    ctx.fillText(speedKmh + ' km/h', 6, 12);
+  function drawTrack() {
+    ctx.strokeStyle='#444'; ctx.lineWidth=trackW; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath();
+    for(var i=0;i<trackSegs.length;i++){var s=trackSegs[i]; if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y);}
+    ctx.closePath(); ctx.stroke();
 
-    // Gear
-    var gearStr = car.gear === 0 ? 'R' : (car.gear === 1 ? 'N' : car.gear - 1);
-    ctx.fillStyle = car.gear > 1 ? '#0f0' : '#ff0';
-    ctx.font = 'bold 12px monospace';
-    ctx.fillText('G' + gearStr, W - 28, 12);
-
-    // Engine temp
-    ctx.fillStyle = car.temp > 105 ? '#f00' : (car.temp > 95 ? '#fa0' : '#0cc');
-    ctx.font = '7px monospace';
-    ctx.fillText('T:' + Math.round(car.temp) + (car.fan ? ' FAN' : ''), 6, 22);
-
-    // Boost indicator
-    if (car.boost) {
-      ctx.fillStyle = '#f0f';
-      ctx.fillText('BOOST!', W/2 - 14, 12);
-    } else if (car.boostCD > 0) {
-      ctx.fillStyle = '#666';
-      ctx.fillText('CD:' + Math.ceil(car.boostCD) + 's', W/2 - 14, 12);
+    ctx.strokeStyle='#e74c3c'; ctx.lineWidth=2; ctx.setLineDash([4,4]);
+    ctx.beginPath();
+    for(var i=0;i<trackSegs.length;i++){
+      var s=trackSegs[i], nx=-Math.sin(s.angle), ny=Math.cos(s.angle);
+      var ex=s.x+nx*trackW*0.5, ey=s.y+ny*trackW*0.5;
+      if(i===0) ctx.moveTo(ex,ey); else ctx.lineTo(ex,ey);
     }
+    ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
 
-    // Lap / Time
-    ctx.fillStyle = '#ccc';
-    ctx.font = '7px monospace';
-    ctx.fillText('Lap:' + lapCount + ' T:' + car.lapTime.toFixed(1) + 's', 6, H - 28);
-    if (car.bestLap > 0) {
-      ctx.fillStyle = '#0f0';
-      ctx.fillText('Best:' + car.bestLap.toFixed(1) + 's', W - 60, H - 28);
-    }
+    var s0=trackSegs[0];
+    ctx.strokeStyle='#fff'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(s0.x-10,s0.y-10); ctx.lineTo(s0.x+10,s0.y+10); ctx.stroke();
+  }
 
-    // 0-100 timer
-    if (car.accelTime > 0 && car.accelTime < 30) {
-      ctx.fillStyle = '#ff0';
-      ctx.fillText('0-100: ' + car.accelTime.toFixed(2) + 's', W/2 - 24, H - 12);
-    }
-
-    // Engine off warning
-    if (!car.engineOn) {
-      ctx.fillStyle = '#f00';
-      ctx.font = '8px monospace';
-      ctx.fillText('ENGINE OFF — Clutch+Roll!', 30, H/2);
-    }
-
-    // Clutch indicator
-    if (input.clutch) {
-      ctx.fillStyle = '#fa0';
-      ctx.font = '7px monospace';
-      ctx.fillText('CLUTCH', W - 40, 22);
+  function drawAICars() {
+    var ais=[{p:car.pos+5,o:-8,c:'#e74c3c'},{p:car.pos+12,o:8,c:'#3498db'},{p:car.pos-8,o:0,c:'#2ecc71'}];
+    for(var i=0;i<ais.length;i++){
+      var idx=Math.floor(((ais[i].p%TRACK_LEN)+TRACK_LEN)%TRACK_LEN);
+      var s=trackSegs[idx]; if(!s) continue;
+      var nx=-Math.sin(s.angle), ny=Math.cos(s.angle);
+      var ax=s.x+nx*ais[i].o, ay=s.y+ny*ais[i].o;
+      ctx.save(); ctx.translate(ax,ay); ctx.rotate(s.angle);
+      ctx.fillStyle=ais[i].c; ctx.fillRect(-6,-3,12,6);
+      ctx.fillStyle='#222'; ctx.fillRect(-4,-2,2,4); ctx.fillRect(2,-2,2,4);
+      ctx.restore();
     }
   }
 
-  // ── Main loop ─────────────────────────────────────────
-  var lastTime = performance.now();
-  function frame(now) {
-    var dt = Math.min(0.05, (now - lastTime) / 1000);
-    lastTime = now;
-    updatePhysics(dt);
+  function drawPlayerCar() {
+    ctx.save(); ctx.translate(car.x,car.y); ctx.rotate(car.angle);
+    ctx.fillStyle='#f1c40f'; ctx.fillRect(-7,-4,14,8);
+    ctx.fillStyle='#f39c12'; ctx.fillRect(-3,-3,6,6);
+    ctx.fillStyle='#222';
+    ctx.fillRect(-6,-5,3,2); ctx.fillRect(-6,3,3,2);
+    ctx.fillRect(3,-5,3,2); ctx.fillRect(3,3,3,2);
+    ctx.fillStyle='#666';
+    for(var w=0;w<4;w++){
+      var wx=(w<2?-5:4), wy=(w%2===0?-4:4);
+      ctx.fillRect(wx,wy+Math.sin(car.wheelSpin[w]*0.5)*1.5,2,1);
+    }
+    ctx.restore();
+
+    if(car.handbrake&&car.speed>20){
+      for(var s=0;s<3;s++){
+        var sx=car.x-Math.cos(car.angle)*8+(Math.random()-0.5)*6;
+        var sy=car.y-Math.sin(car.angle)*8+(Math.random()-0.5)*6;
+        ctx.fillStyle='rgba(200,200,200,'+(0.3-s*0.1)+')';
+        ctx.beginPath(); ctx.arc(sx,sy,3+s*2,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+
+  function drawHUD() {
+    var rpmPct=(car.rpm-800)/7400;
+    ctx.fillStyle='#333'; ctx.fillRect(10,10,100,8);
+    ctx.fillStyle = rpmPct>0.85?'#e74c3c':rpmPct>0.6?'#f39c12':'#2ecc71';
+    ctx.fillRect(10,10,100*rpmPct,8);
+    ctx.fillStyle='#fff'; ctx.font='bold 16px monospace'; ctx.fillText('G'+car.gear,115,20);
+    ctx.font='12px monospace';
+    ctx.fillText('SPD:'+Math.floor(car.speed),10,30);
+    ctx.fillText('LAP:'+car.lapCount+'/3',10,46);
+    ctx.fillText('TIME:'+car.lapTime.toFixed(1)+'s',10,60);
+    if(car.bestLap<999) ctx.fillText('BEST:'+car.bestLap.toFixed(1)+'s',10,74);
+    ctx.fillStyle = car.engineTemp>100?'#e74c3c':'#3498db';
+    ctx.fillText('TMP:'+Math.floor(car.engineTemp)+(car.fanOn?' FAN':''),130,30);
+    if(car.overboost){ctx.fillStyle='#e74c3c';ctx.fillText('BOOST!',130,46);}
+    else if(car.obCooldown>0){ctx.fillStyle='#666';ctx.fillText('CD:'+car.obCooldown.toFixed(0),130,46);}
+    ctx.fillStyle = car.fuel<20?'#e74c3c':'#2ecc71';
+    ctx.fillText('FL:'+Math.floor(car.fuel)+'%',130,62);
+    if(car.abs){ctx.fillStyle='#3498db';ctx.fillText('ABS',130,78);}
+    if(car.accelTime<30&&car.speed<100){ctx.fillStyle='#f1c40f';ctx.fillText('0-100:'+car.accelTime.toFixed(1)+'s',130,94);}
+    else if(car.speed>=100&&car.accelTime<30){ctx.fillStyle='#2ecc71';ctx.fillText('0-100:'+car.accelTime.toFixed(2)+'s \u2713',130,94);}
+  }
+
+  function drawButtons() {
+    for(var i=0;i<btns.length;i++){
+      var b=btns[i], act=touch[b.ref];
+      ctx.fillStyle=act?'#f1c40f':'#333'; ctx.fillRect(b.x,b.y,b.w,b.h);
+      ctx.strokeStyle='#666'; ctx.lineWidth=1; ctx.strokeRect(b.x,b.y,b.w,b.h);
+      ctx.fillStyle=act?'#000':'#ccc'; ctx.font='10px monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(b.label,b.x+b.w/2,b.y+b.h/2);
+      ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    }
+  }
+
+  function drawMenu() {
+    ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#f1c40f'; ctx.font='bold 14px monospace'; ctx.textAlign='center';
+    ctx.fillText('CITROEN ZX KIT CAR',W/2,70);
+    ctx.fillText('RALLY SIM v6.0',W/2,90);
+    ctx.fillStyle='#aaa'; ctx.font='10px monospace';
+    ctx.fillText('256x256 Virtual Racing',W/2,110);
+    ctx.fillText('',W/2,125);
+    ctx.fillStyle='#fff'; ctx.fillText('CONTROLS:',W/2,145);
+    ctx.fillStyle='#aaa';
+    ctx.fillText('Arrows/WASD - Drive',W/2,160);
+    ctx.fillText('Shift - Gear Up | Ctrl - Down',W/2,172);
+    ctx.fillText('Space - Handbrake',W/2,184);
+    ctx.fillText('O - Overboost | B - ABS',W/2,196);
+    ctx.fillText('C - Camera | R - Reset',W/2,208);
+    ctx.fillStyle='#f1c40f'; ctx.fillText('Tap or Press ENTER to Start',W/2,232);
+    ctx.textAlign='left';
+  }
+
+  function drawFinish() {
+    ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#f1c40f'; ctx.font='bold 16px monospace'; ctx.textAlign='center';
+    ctx.fillText('RACE FINISHED!',W/2,80);
+    ctx.fillStyle='#fff'; ctx.font='12px monospace';
+    ctx.fillText('Total: '+car.finishTime.toFixed(2)+'s',W/2,110);
+    ctx.fillText('Best Lap: '+(car.bestLap<999?car.bestLap.toFixed(2):'--'),W/2,130);
+    ctx.fillText('Max SPD: '+Math.floor(car.speedMax),W/2,150);
+    ctx.fillText('Damage: '+Math.floor(car.damage)+'%',W/2,170);
+    ctx.fillStyle='#f1c40f'; ctx.fillText('Tap or R to Restart',W/2,210);
+    ctx.textAlign='left';
+  }
+
+  // ─── Game State ─────────────────────────────────────
+  var gameState = 'menu';
+  var frameCount = 0;
+
+  function checkState() {
+    if(gameState==='menu' && (isDown('enter')||isDown(' ')||isDown('up'))) {
+      gameState='racing'; initAudio();
+    }
+    if(gameState==='finished' && isDown('r')) {
+      car.x=128; car.y=80; car.angle=0; car.speed=0; car.gear=0; car.rpm=800;
+      car.lapCount=0; car.lapTime=0; car.raceTime=0; car.bestLap=999;
+      car.fuel=100; car.damage=0; car.speedMax=0; car.accelTime=0;
+      car.pos=0; car.engineTemp=75; car.fanOn=false; car.obCooldown=0; car.obTimer=0;
+      gameState='racing';
+    }
+  }
+
+  // ─── Main Loop ──────────────────────────────────────
+  function frame() {
+    frameCount++;
+    checkState();
+    if(gameState==='racing') { updatePhysics(); updAudio(); }
     draw();
     requestAnimationFrame(frame);
   }
+
+  // ─── Boot ───────────────────────────────────────────
+  function resize() {
+    var size = Math.min(window.innerWidth, window.innerHeight) - 10;
+    canvas.style.width = size+'px'; canvas.style.height = size+'px';
+  }
+  window.addEventListener('resize', resize); resize();
+  canvas.addEventListener('contextmenu', function(e){e.preventDefault();});
+
   requestAnimationFrame(frame);
-
-  // ── Gear display (DOM) ──────────────────────────────
-  var gearEl = document.getElementById('gear-display');
-  setInterval(function () {
-    if (!gearEl) return;
-    var g = car.gear === 0 ? 'R' : (car.gear === 1 ? 'N' : car.gear - 1);
-    gearEl.textContent = 'Gear: ' + g + ' | RPM: ' + Math.round(car.rpm);
-  }, 100);
-
 })();

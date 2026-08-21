@@ -3,139 +3,52 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Citroen ZX Kit Car Rally Sim v6.0</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Citroen ZX Kit Car Sim v6.0</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-  body {
-    background: #1a1a1a;
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0a0a0a;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    font-family: 'Courier New', monospace;
+  }
+  #gameContainer {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    font-family: 'Courier New', monospace;
-    overflow: hidden;
-    touch-action: none;
-  }
-  #gameContainer {
-    position: relative;
-    width: 256px;
-    height: 256px;
-    border: 2px solid #555;
-    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    width: 100%; height: 100%;
+    background: #0a0a0a;
   }
   canvas {
-    display: block;
     image-rendering: pixelated;
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
+    border: 2px solid #333;
+    background: #000;
+    max-width: 100%;
+    max-height: 100%;
   }
-  #title {
-    color: #0ff;
-    font-size: 10px;
-    margin-bottom: 4px;
-    text-align: center;
-    letter-spacing: 1px;
-  }
-  #subtitle {
-    color: #888;
-    font-size: 8px;
-    margin-bottom: 8px;
-    text-align: center;
-  }
-  /* Virtual Keyboard */
-  #vkeyboard {
-    margin-top: 10px;
-    display: grid;
-    grid-template-columns: repeat(4, 50px);
-    grid-gap: 4px;
-    padding: 8px;
-    background: #222;
-    border-radius: 8px;
-    border: 1px solid #444;
-  }
-  .vkey {
-    width: 50px;
-    height: 40px;
-    border: 1px solid #666;
-    border-radius: 6px;
-    background: #333;
-    color: #eee;
-    font-size: 11px;
-    font-weight: bold;
-    font-family: 'Courier New', monospace;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.1s;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .vkey:active, .vkey.active {
-    background: #0a0;
-    color: #fff;
-    border-color: #0f0;
-  }
-  .vkey.boost:active, .vkey.boost.active { background: #a00; border-color: #f00; }
-  .vkey.ign:active, .vkey.ign.active { background: #aa0; border-color: #ff0; color: #000; }
-  .vkey.hb:active, .vkey.hb.active { background: #a0a; border-color: #f0f; }
-  .vkey.clutch:active, .vkey.clutch.active { background: #06a; border-color: #0af; }
-  .vkey.shift:active, .vkey.shift.active { background: #0aa; border-color: #0ff; }
-  #status {
-    color: #0f0;
+  #info {
+    position: fixed;
+    bottom: 2px;
+    right: 4px;
+    color: #444;
     font-size: 9px;
-    margin-top: 6px;
-    text-align: center;
-    min-height: 14px;
-    font-family: 'Courier New', monospace;
+    z-index: 100;
   }
-  #msgOverlay {
-    position: absolute;
-    top: 0; left: 0;
-    width: 256px; height: 256px;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.92);
-    color: #0ff;
-    font-size: 9px;
-    text-align: center;
-    line-height: 1.6;
-    z-index: 10;
-    padding: 10px;
-  }
-  #msgOverlay .big { font-size: 14px; color: #ff0; margin-bottom: 8px; }
-  #msgOverlay .med { font-size: 10px; color: #aaa; margin-top: 6px; }
-  #msgOverlay .hl { color: #0f0; }
-  #msgOverlay .warn { color: #f80; }
-  #msgOverlay .err { color: #f00; }
 </style>
 </head>
 <body>
-<div id="title">CITROEN ZX KIT CAR - F2 RALLY SIM v6.0</div>
-<div id="subtitle">256x256 | Virtual Keys | Android 4.4.4+</div>
 <div id="gameContainer">
-  <canvas id="screen" width="256" height="256"></canvas>
-  <div id="msgOverlay">
-    <div class="big" id="ovTitle">READY</div>
-    <div id="ovBody"></div>
-    <div class="med" id="ovFoot"></div>
-  </div>
+  <canvas id="gameCanvas" width="256" height="256"></canvas>
 </div>
-<div id="status">Press [I] to start ignition | [G] throttle | [B] brake</div>
-<div id="vkeyboard">
-  <div class="vkey throttle" data-key="g">[G] Gas</div>
-  <div class="vkey brake" data-key="b">[B] Brk</div>
-  <div class="vkey hb" data-key="space">[Spc] HB</div>
-  <div class="vkey shift" data-key="=">[+] Up</div>
-  <div class="vkey shift" data-key="-">[-] Dn</div>
-  <div class="vkey clutch" data-key="c">[C] Clutch</div>
-  <div class="vkey ign" data-key="i">[I] Ign</div>
-  <div class="vkey boost" data-key="p">[P] Boost</div>
-  <div class="vkey" data-key="r" style="grid-column:span 2; width:104px; background:#530;">[R] Reset</div>
-  <div class="vkey" data-key="q" style="grid-column:span 2; width:104px; background:#335;">[Q] Quit</div>
-</div>
+<div id="info">ZX Kit Car Sim v6.0</div>
 <script src="game.js"></script>
 </body>
 </html>
