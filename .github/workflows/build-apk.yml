@@ -1,0 +1,369 @@
+# ============================================================
+#  Citroen ZX Kit Car Rally Sim v6.0 — Build Android APK
+#  Single-file GitHub Actions workflow
+#  All known issues fixed:
+#   ✅ actions/* 全部最新版 (checkout@v4, setup-node@v4, setup-java@v5)
+#   ✅ upload-artifact@v4 (v3 已强制弃用)
+#   ✅ softprops/action-gh-release@v2
+#   ✅ sdkmanager 同 step export PATH (解决 exit 127)
+#   ✅ JAVA_HOME 锁定 JDK 17 给 SDK 工具，JDK 8 仅给 Cordova
+#   ✅ Pillow 预装 (解决 No module named 'PIL')
+#   ✅ Node 18 (消除 Node 20 弃用警告)
+# ============================================================
+
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  ANDROID_API: "28"
+  ANDROID_BUILD_TOOLS: "28.0.3"
+  MIN_SDK: "19"
+  CORDOVA_VERSION: "8.1.2"
+  NODE_VERSION: "18"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ─────────────────────────────────────────────
+      # 1. Checkout
+      # ─────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ─────────────────────────────────────────────
+      # 2. Setup Node.js 18 (LTS, 消除 Node 20 弃用警告)
+      # ─────────────────────────────────────────────
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify Node.js
+        run: |
+          node --version
+          npm --version
+
+      # ─────────────────────────────────────────────
+      # 3. Install Cordova globally
+      # ─────────────────────────────────────────────
+      - name: Install Cordova ${{ env.CORDOVA_VERSION }}
+        run: npm install -g cordova@${{ env.CORDOVA_VERSION }}
+
+      - name: Verify Cordova
+        run: cordova --version
+
+      # ─────────────────────────────────────────────
+      # 4. Setup JDK 17 (Temurin) — 默认给 SDK 工具用
+      # ─────────────────────────────────────────────
+      - name: Setup JDK 17 (Temurin) — for SDK tools
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Verify JDK 17
+        run: |
+          echo "JAVA_HOME (17) = $JAVA_HOME"
+          java -version
+
+      # ─────────────────────────────────────────────
+      # 5. Setup JDK 8 (Zulu) — 仅给 Cordova/Gradle 用
+      #    安装后立即把 JAVA_HOME 还原为 17
+      # ─────────────────────────────────────────────
+      - name: Setup JDK 8 (Zulu) — for Cordova/Gradle
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '8'
+
+      - name: Save JDK 8 path & restore JAVA_HOME to 17
+        run: |
+          echo "JDK8_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
+          echo "✅ JDK8_HOME=$JAVA_HOME_8_X64"
+          echo "✅ JAVA_HOME restored to JDK 17: $JAVA_HOME_17_X64"
+
+      # ─────────────────────────────────────────────
+      # 6. Install Pillow (解决 ModuleNotFoundError: PIL)
+      # ─────────────────────────────────────────────
+      - name: Install Pillow (Python image library)
+        run: pip install --quiet "Pillow==10.4.0"
+
+      # ─────────────────────────────────────────────
+      # 7. Setup Android SDK manually
+      #    - 同 step 内 export PATH (解决 exit 127)
+      #    - 强制 JAVA_HOME=JDK 17 (解决 UnsupportedClassVersionError)
+      #    - cmdline-tools 11.0 (稳定, JDK 17 兼容)
+      # ─────────────────────────────────────────────
+      - name: Setup Android SDK
+        run: |
+          set -e
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export ANDROID_HOME="$HOME/android-sdk"
+          export CMDTOOLS="$ANDROID_HOME/cmdline-tools/tools"
+          export PATH="$CMDTOOLS/bin:$PATH"
+
+          echo "✅ JAVA_HOME = $JAVA_HOME"
+          echo "✅ ANDROID_HOME = $ANDROID_HOME"
+
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          cd "$ANDROID_HOME/cmdline-tools"
+
+          echo "📥 Downloading cmdline-tools 11.0..."
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
+
+          echo "📦 Extracting..."
+          unzip -q commandlinetools-linux-10406996_latest.zip
+          mv cmdline-tools tools
+          rm commandlinetools-linux-10406996_latest.zip
+
+          # 写入 GITHUB_PATH (跨 step 生效)
+          echo "$CMDTOOLS/bin" >> $GITHUB_PATH
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+
+          echo "🔍 sdkmanager location:"
+          which sdkmanager
+          ls -la "$CMDTOOLS/bin/sdkmanager"
+
+          echo "🔍 sdkmanager version:"
+          sdkmanager --version
+
+      # ─────────────────────────────────────────────
+      # 8. Install Android SDK packages & accept licenses
+      # ─────────────────────────────────────────────
+      - name: Install Android SDK packages
+        run: |
+          set -e
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$ANDROID_HOME/cmdline-tools/tools/bin:$PATH"
+
+          echo "📜 Accepting licenses..."
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+          echo "📦 Installing platform-tools, platform-28, build-tools 28.0.3..."
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-28" \
+            "build-tools;28.0.3"
+
+          echo "✅ SDK packages installed"
+          sdkmanager --list_installed 2>/dev/null || true
+
+      # ─────────────────────────────────────────────
+      # 9. Generate icons & splash screens (Python + Pillow)
+      # ─────────────────────────────────────────────
+      - name: Generate icons & splash screens
+        run: |
+          set -e
+          mkdir -p res/icon/android res/screen/android
+
+          python3 << 'PYEOF'
+          from PIL import Image, ImageDraw
+
+          # --- Icons ---
+          sizes = {'ldpi': 36, 'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144}
+          for density, size in sizes.items():
+              img = Image.new('RGBA', (size, size), (26, 26, 26, 255))
+              d = ImageDraw.Draw(img)
+              m = size // 6
+              # Body
+              d.rounded_rectangle([m, size//3, size-m, size*2//3],
+                                  radius=size//8, fill=(200, 200, 0, 255))
+              # Windows
+              cl, cr = size//3, size*2//3
+              d.polygon([(cl, size//3), (cr, size//3),
+                         (cr-size//8, m), (cl+size//8, m)],
+                        fill=(255, 255, 80, 255))
+              # Wheels
+              wr = size // 8
+              for wx in [size//4, size*3//4]:
+                  wy = size*2//3
+                  d.ellipse([wx-wr, wy-wr//2, wx+wr, wy+wr//2], fill=(30, 30, 30, 255))
+                  d.ellipse([wx-wr//2, wy-wr//3, wx+wr//2, wy+wr//3], fill=(150, 150, 150, 255))
+              img.save(f'res/icon/android/{density}.png')
+              print(f'  Icon: {density}.png ({size}x{size})')
+
+          # --- Splash screens ---
+          for density, w, h in [('mdpi', 320, 480), ('hdpi', 480, 800),
+                                ('xhdpi', 720, 1280), ('xxhdpi', 1080, 1920)]:
+              img = Image.new('RGBA', (w, h), (26, 26, 46, 255))
+              d = ImageDraw.Draw(img)
+              cx, cy = w//2, h//3
+              # Title bar
+              d.rounded_rectangle([cx-w//4, cy-h//8, cx+w//4, cy+h//8],
+                                  radius=h//16, fill=(0, 200, 200, 255))
+              # Car body
+              car_y = h//2
+              cw = w // 3
+              cx0 = cx - cw//2
+              d.rounded_rectangle([cx0, car_y, cx0+cw, car_y+cw//3],
+                                  radius=cw//8, fill=(200, 200, 0, 255))
+              # Car top
+              d.polygon([(cx0+cw//4, car_y), (cx0+cw*3//4, car_y),
+                         (cx0+cw*5//8, car_y-cw//4), (cx0+cw*3//8, car_y-cw//4)],
+                        fill=(255, 255, 80, 255))
+              # Wheels
+              for wx in [cx0+cw//4, cx0+cw*3//4]:
+                  r = cw // 8
+                  d.ellipse([wx-r, car_y+cw//4-r, wx+r, car_y+cw//4+r], fill=(30, 30, 30, 255))
+              # Ground
+              d.rectangle([0, h*3//4, w, h], fill=(20, 20, 20, 255))
+              img.save(f'res/screen/android/splash-{density}.png')
+              print(f'  Splash: {density} ({w}x{h})')
+
+          print("✅ Done! All icons & splash screens generated.")
+          PYEOF
+
+      # ─────────────────────────────────────────────
+      # 10. Init Cordova project
+      # ─────────────────────────────────────────────
+      - name: Init Cordova project
+        run: |
+          set -e
+          cordova create app com.zxkitcar.sim CitroenZX
+          echo "✅ Cordova project created"
+
+      # ─────────────────────────────────────────────
+      # 11. Copy web assets into Cordova www/
+      # ─────────────────────────────────────────────
+      - name: Copy web assets
+        run: |
+          set -e
+          # Copy root-level web files
+          cp index.html app/www/ 2>/dev/null || true
+          cp game.js app/www/ 2>/dev/null || true
+
+          # Copy res/ into app/ for Cordova to pick up icons/splash
+          mkdir -p app/res
+          cp -r res/icon app/res/ 2>/dev/null || true
+          cp -r res/screen app/res/ 2>/dev/null || true
+
+          echo "✅ Web assets copied:"
+          ls -la app/www/
+          ls -la app/res/ 2>/dev/null || true
+
+      # ─────────────────────────────────────────────
+      # 12. Add Android platform (Cordova-Android 8.1.0 → API 19+)
+      # ─────────────────────────────────────────────
+      - name: Add Android platform
+        working-directory: app
+        run: |
+          set -e
+          cordova platform add android@8.1.0
+          echo "✅ Android platform added"
+
+      # ─────────────────────────────────────────────
+      # 13. Build DEBUG APK (JDK 8 for Cordova/Gradle 4.x)
+      # ─────────────────────────────────────────────
+      - name: Build Debug APK
+        working-directory: app
+        run: cordova build android --debug
+        env:
+          JAVA_HOME: ${{ env.JDK8_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      # ─────────────────────────────────────────────
+      # 14. Build RELEASE APK (unsigned, JDK 8)
+      # ─────────────────────────────────────────────
+      - name: Build Release APK
+        working-directory: app
+        run: cordova build android --release
+        env:
+          JAVA_HOME: ${{ env.JDK8_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      # ─────────────────────────────────────────────
+      # 15. Locate & rename APKs
+      # ─────────────────────────────────────────────
+      - name: Locate & rename APKs
+        run: |
+          set -e
+          mkdir -p artifacts
+
+          DEBUG_APK=$(find app/platforms/android -name "*.apk" -path "*/debug/*" | head -1)
+          RELEASE_APK=$(find app/platforms/android -name "*.apk" -path "*/release/*" | head -1)
+
+          echo "Debug APK: $DEBUG_APK"
+          echo "Release APK: $RELEASE_APK"
+
+          cp "$DEBUG_APK"   artifacts/zx-kitcar-sim-v6.0-debug.apk
+          cp "$RELEASE_APK" artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
+
+          ls -lh artifacts/
+          echo "✅ APKs located and renamed"
+
+      # ─────────────────────────────────────────────
+      # 16. Upload DEBUG APK artifact (upload-artifact@v4)
+      # ─────────────────────────────────────────────
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx-kitcar-sim-debug-apk
+          path: artifacts/zx-kitcar-sim-v6.0-debug.apk
+          retention-days: 30
+
+      # ─────────────────────────────────────────────
+      # 17. Upload RELEASE APK artifact (upload-artifact@v4)
+      # ─────────────────────────────────────────────
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx-kitcar-sim-release-apk
+          path: artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
+          retention-days: 30
+
+      # ─────────────────────────────────────────────
+      # 18. Package release zip (only on tag)
+      # ─────────────────────────────────────────────
+      - name: Package release zip
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -e
+          cd artifacts
+          zip -r ../zx-kitcar-sim-v6.0-release.zip \
+            zx-kitcar-sim-v6.0-debug.apk \
+            zx-kitcar-sim-v6.0-release-unsigned.apk
+          cd ..
+          ls -lh zx-kitcar-sim-v6.0-release.zip
+          echo "✅ Release zip packaged"
+
+      # ─────────────────────────────────────────────
+      # 19. Upload to GitHub Releases (softprops/action-gh-release@v2)
+      # ─────────────────────────────────────────────
+      - name: Upload to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/zx-kitcar-sim-v6.0-debug.apk
+            artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
+            zx-kitcar-sim-v6.0-release.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─────────────────────────────────────────────
+      # 20. Build summary
+      # ─────────────────────────────────────────────
+      - name: Build summary
+        run: |
+          echo "============================================"
+          echo "  Citroen ZX Kit Car Rally Sim v6.0"
+          echo "  Build Complete!"
+          echo "============================================"
+          echo ""
+          echo "APK files:"
+          ls -lh artifacts/ 2>/dev/null || echo "  (no APKs found)"
+          echo ""
+          echo "Debug APK:   zx-kitcar-sim-v6.0-debug.apk"
+          echo "Release APK: zx-kitcar-sim-v6.0-release-unsigned.apk"
+          echo ""
+          echo "Install on Android 4.4.4+ (API 19+)"
+          echo "============================================"
