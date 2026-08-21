@@ -1,16 +1,21 @@
 {
   "name": "citroen-zx-kitcar-sim",
   "version": "6.0.0",
-  "description": "Citroen ZX Kit Car Rally Simulator v6.0 - 256x256 Canvas + Virtual Buttons",
+  "description": "Citroen ZX Kit Car Rally Simulator v6.0 - 256x256 Virtual Racing Game for Android 4.4.4+",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "dependencies": {
+  "devDependencies": {
     "cordova": "8.1.2"
   },
   "engines": {
-    "node": ">=8"
+    "node": ">=18"
+  },
+  "cordova": {
+    "platforms": [
+      "android@8.1.0"
+    ]
   }
 }

@@ -1,2 +1,1 @@
-Web assets for Cordova build.
-Copied from root during CI build process.
+Cordova web assets — copied from root at build time.
