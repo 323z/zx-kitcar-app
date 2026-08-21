@@ -55,7 +55,7 @@ jobs:
       - name: Install Pillow
         run: pip install --quiet "Pillow==10.4.0"
 
-      # ── 7. Android SDK（关键降级）──────────────
+      # ── 7. Android SDK ─────────────────────────
       - name: Setup Android SDK
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
@@ -72,7 +72,7 @@ jobs:
           export PATH="$BIN:$PATH"
           "$BIN/sdkmanager" --version
 
-      - name: Install SDK packages (降级到兼容组合)
+      - name: Install SDK packages
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           BIN=$ANDROID_HOME/cmdline-tools/tools/bin
@@ -92,7 +92,7 @@ jobs:
           cp game.js app/www/ 2>/dev/null || true
 
       # ── 9. 生成图标/启动屏 ────────────────────
-      - name: Generate icons & splash
+      - name: Generate icons and splash screens
         working-directory: app
         run: |
           mkdir -p res/icon/android res/screen/android
@@ -127,19 +127,20 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_8_X64"
           cordova platform add android@8.1.0
 
-      # ── 11. 彻底移除 bintray（不破坏语法）──
-      - name: Remove bintray plugin safely
+      # ── 11. 移除 bintray 引用 ─────────────────
+      - name: Remove bintray plugin
         working-directory: app/platforms/android
         run: |
           sed -i '/com.jfrog.bintray.gradle:gradle-bintray-plugin/d' CordovaLib/build.gradle
           sed -i '/bintray/,/}/d' CordovaLib/build.gradle
           find . -name "build.gradle" -exec sed -i 's/jcenter()//g' {} \;
 
-      # ── 12. 强制使用系统 Gradle ───────────────
-      - name: Force system Gradle
-        working-directory: app/platforms)
+      # ── 12. 删除 gradle wrapper ────────────────
+      - name: Remove gradle wrapper
+        working-directory: app/platforms/android
         run: |
           rm -rf gradle wrapper gradlew gradlew.bat
+          echo "Gradle wrapper removed"
 
       # ── 13. Build Debug ─────────────────────────
       - name: Build Debug APK
@@ -171,10 +172,10 @@ jobs:
       - name: Locate APKs
         run: |
           mkdir -p artifacts
-          find app/platforms/android -name "*.apk" -exec cp {} artifacts/ \;
+          find app -name "*.apk" -exec cp {} artifacts/ \;
           ls -la artifacts/
 
-      # ── 16. Upload Debug APK ────────────────────
+      # ── 16. Upload Debug ───────────────────────
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -182,7 +183,7 @@ jobs:
           path: artifacts/*debug*.apk
           if-no-files-found: warn
 
-      # ── 17. Upload Release APK ──────────────────
+      # ── 17. Upload Release ────────────────────
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
