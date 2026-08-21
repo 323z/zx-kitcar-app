@@ -127,20 +127,35 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_8_X64"
           cordova platform add android@8.1.0
 
-      # ── 11. 移除 bintray 引用 ─────────────────
-      - name: Remove bintray plugin
-        working-directory: app/platforms/android
+      # ── 11. ✅ 关键：用 init.gradle 强制注入仓库 ──
+      - name: Create init.gradle (force Google + MavenCentral)
         run: |
-          sed -i '/com.jfrog.bintray.gradle:gradle-bintray-plugin/d' CordovaLib/build.gradle
-          sed -i '/bintray/,/}/d' CordovaLib/build.gradle
-          find . -name "build.gradle" -exec sed -i 's/jcenter()//g' {} \;
+          sudo tee /opt/init.gradle > /dev/null << 'INITEOF'
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+                  maven { url "https://maven.google.com" }
+                  jcenter() // 保留但最后
+              }
+              buildscript {
+                  repositories {
+                      google()
+                      mavenCentral()
+                      maven { url "https://maven.google.com" }
+                      jcenter()
+                  }
+              }
+          }
+          INITEOF
+          cat /opt/init.gradle
 
-      # ── 12. 删除 gradle wrapper ────────────────
-      - name: Remove gradle wrapper
+      # ── 12. 修复 wrapper 版本 ─────────────────
+      - name: Fix Gradle wrapper
         working-directory: app/platforms/android
         run: |
-          rm -rf gradle wrapper gradlew gradlew.bat
-          echo "Gradle wrapper removed"
+          find . -name "gradle-wrapper.properties" -exec sed -i \
+            's|https://services.gradle.org/distributions/gradle-.*-bin.zip|https://services.gradle.org/distributions/gradle-4.10.3-bin.zip|g' {} \;
 
       # ── 13. Build Debug ─────────────────────────
       - name: Build Debug APK
@@ -148,7 +163,7 @@ jobs:
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
-          gradle assembleDebug --no-daemon \
+          ./gradlew assembleDebug --no-daemon --init-script /opt/init.gradle \
             -Pandroid.useDeprecatedNdk=true \
             -PcdvMinSdkVersion=19 \
             -PcdvTargetSdkVersion=28
@@ -161,7 +176,7 @@ jobs:
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
-          gradle assembleRelease --no-daemon \
+          ./gradlew assembleRelease --no-daemon --init-script /opt/init.gradle \
             -Pandroid.useDeprecatedNdk=true \
             -PcdvMinSdkVersion=19 \
             -PcdvTargetSdkVersion=28
