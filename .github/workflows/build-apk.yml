@@ -11,7 +11,7 @@ jobs:
 
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      ANDROID_NDK_HOME: ""          # ✅ 消除 NDK 警告
+      ANDROID_NDK_HOME: ""
 
     steps:
       # ── 1. Checkout ──────────────────────────────
@@ -22,25 +22,26 @@ jobs:
         with:
           node-version: '18'
 
-      # ── 3. JDK 17 默认 (SDK 工具用) ──────────
+      # ── 3. JDK 17 (SDK 工具) ───────────────────
       - name: Setup JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup JDK 8 (Cordova build only)
+      # ── 4. JDK 8 (Cordova 构建) ───────────────
+      - name: Setup JDK 8
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '8'
 
-      - name: Lock JAVA_HOME + save JDK8
+      - name: Lock JAVA_HOME
         run: |
           echo "JDK8_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
 
-      # ── 4. 安装 Gradle 4.10.3 ─────────────────
+      # ── 5. 安装 Gradle 4.10.3 ─────────────────
       - name: Install Gradle 4.10.3
         run: |
           cd /tmp
@@ -50,11 +51,11 @@ jobs:
           echo "/opt/gradle-4.10.3/bin" >> $GITHUB_PATH
           gradle -v
 
-      # ── 5. 安装 Pillow ─────────────────────────
+      # ── 6. Pillow ──────────────────────────────
       - name: Install Pillow
         run: pip install --quiet "Pillow==10.4.0"
 
-      # ── 6. Android SDK ─────────────────────────
+      # ── 7. Android SDK（关键降级）──────────────
       - name: Setup Android SDK
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
@@ -71,14 +72,15 @@ jobs:
           export PATH="$BIN:$PATH"
           "$BIN/sdkmanager" --version
 
-      - name: Install SDK packages
+      - name: Install SDK packages (降级到兼容组合)
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           BIN=$ANDROID_HOME/cmdline-tools/tools/bin
           yes | "$BIN/sdkmanager" --licenses >/dev/null
-          "$BIN/sdkmanager" "platform-tools" "platforms;android-28" "build-tools;28.0.3"
+          # ✅ 关键：Build Tools 27.0.3 是 Cordova 8.1.0 的黄金版本
+          "$BIN/sdkmanager" "platform-tools" "platforms;android-28" "build-tools;27.0.3"
 
-      # ── 7. Cordova ─────────────────────────────
+      # ── 8. Cordova ─────────────────────────────
       - name: Install Cordova
         run: npm install -g cordova@8.1.2
 
@@ -90,7 +92,7 @@ jobs:
           cp index.html app/www/ 2>/dev/null || true
           cp game.js app/www/ 2>/dev/null || true
 
-      # ── 8. 生成图标/启动屏 ────────────────────
+      # ── 9. 生成图标/启动屏 ────────────────────
       - name: Generate icons & splash
         working-directory: app
         run: |
@@ -119,67 +121,72 @@ jobs:
           print("Done!")
           PYEOF
 
-      # ── 9. Add Android platform ───────────────
+      # ── 10. Add Android platform ───────────────
       - name: Add Android platform
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           cordova platform add android@8.1.0
 
-      # ── 10. ✅ 只改 wrapper URL，不动 build.gradle ──
-      - name: Fix Gradle wrapper version only
+      # ── 11. ✅ 彻底移除 bintray（不破坏语法）──
+      - name: Remove bintray plugin safely
         working-directory: app/platforms/android
         run: |
-          find . -name "gradle-wrapper.properties" -exec sed -i \
-            's|https://services.gradle.org/distributions/gradle-.*-bin.zip|https://services.gradle.org/distributions/gradle-4.10.3-bin.zip|g' {} \;
+          # 删除整个 buildscript 依赖块中的 bintray 行
+          sed -i '/com.jfrog.bintray.gradle:gradle-bintray-plugin/d' CordovaLib/build.gradle
+          sed -i '/bintray/,/}/d' CordovaLib/build.gradle
+          # 删除 jcenter()
+          find . -name "build.gradle" -exec sed -i 's/jcenter()//g' {} \;
+          echo "=== CordovaLib/build.gradle (cleaned) ==="
+          head -40 CordovaLib/build.gradle
 
-      # ── 11. Build Debug ─────────────────────────
+      # ── 12. 强制使用系统 Gradle ───────────────
+      - name: Force system Gradle
+        working-directory: app/platforms/android
+        run: |
+          # 删除 wrapper，强制使用系统 gradle
+          rm -rf gradle wrapper gradlew gradlew.bat
+          echo "✅ Removed gradle wrapper"
+
+      # ── 13. Build Debug ─────────────────────────
       - name: Build Debug APK
-        working-directory: app
+        working-directory: app/platforms/android
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
-          export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-4.10.3-bin.zip
-          cordova build android --debug \
-            -- --no-daemon \
+          gradle assembleDebug --no-daemon \
+            -Pandroid.useDeprecatedNdk=true \
             -PcdvMinSdkVersion=19 \
             -PcdvTargetSdkVersion=28
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ── 12. Build Release ───────────────────────
+      # ── 14. Build Release ───────────────────────
       - name: Build Release APK
-        working-directory: app
+        working-directory: app/platforms/android
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
-          export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-4.10.3-bin.zip
-          cordova build android --release \
-            -- --no-daemon \
+          gradle assembleRelease --no-daemon \
+            -Pandroid.useDeprecatedNdk=true \
             -PcdvMinSdkVersion=19 \
             -PcdvTargetSdkVersion=28
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ── 13. 定位 APK ───────────────────────────
-      - name: Locate and copy APKs
+      # ── 15. 定位 APK ───────────────────────────
+      - name: Locate APKs
         run: |
           mkdir -p artifacts
-          DBG=$(find app -name "*debug*.apk" | head -1)
-          if [ -n "$DBG" ]; then cp "$DBG" artifacts/debug.apk; fi
-          REL=$(find app -name "*release*.apk" | head -1)
-          if [ -n "$REL" ]; then cp "$REL" artifacts/release-unsigned.apk; fi
+          find app/platforms/android -name "*.apk" -exec cp {} artifacts/ \;
           ls -la artifacts/
 
-      # ── 14. Upload ──────────────────────────────
+      # ── 16. Upload ──────────────────────────────
       - uses: actions/upload-artifact@v4
         with:
           name: zx-kitcar-debug-apk
-          path: artifacts/debug.apk
-          if-no-files-found: warn
-
-      - uses: actions/upload-artifact@v4
+ - uses: actions/upload-artifact@v4
         with:
           name: zx-kitcar-release-apk
-          path: artifacts/release-unsigned.apk
+          path: artifacts/*release*.apk
           if-no-files-found: warn
