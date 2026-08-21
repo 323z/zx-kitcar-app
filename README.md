@@ -1,99 +1,93 @@
-# Citroen ZX Kit Car Rally Sim v6.0
+# Citroen ZX Kit Car Rally Simulator v6.0
 
-A complete port of the C++ Windows console racing simulator to HTML5 Canvas + Node.js, packaged as an Android APK via Cordova.
+> 256×256 像素画布 | 虚拟按键 | 完整物理引擎 | Android 4.4.4+
 
-## Features
+## 🎮 游戏特性
 
-- **Full vehicle physics** ported from the original C++ codebase
-- **256x256 pixel canvas** - authentic retro aesthetic
-- **Virtual on-screen keyboard** for touch devices
-- **Push-Start / Bump-Start** - roll in gear, drop clutch to auto-fire the engine
-- **6-speed sequential gearbox** with realistic RPM matching
-- **Cooling system** with overheat limp mode and critical stall
-- **Overboost system** - +15% torque for 8 seconds, 25s cooldown
-- **0-100 km/h timer**
-- **Wheel slip/lock detection** with visual indicators
-- **Compatible with Android 4.4.4+** (API 19+)
+- **引擎物理**: 高斯扭矩曲线, 怠速 900 RPM, 红线 7200 RPM
+- **6速序列变速箱**: 自动换挡 + 离合联动
+- **Push-Start 助推启动**: 熄火后靠惯性重启引擎
+- **Overboost 增压**: 8 秒持续 + 25 秒冷却
+- **冷却系统**: 动态温度 + 风扇自动启停
+- **0-100 km/h 计时**
+- **手刹漂移**: 后轮锁止, 转向过度
+- **虚拟按键 + 物理键盘双输入**
 
-## Controls
+## 🎹 键盘控制
 
-| Key | Action |
-|-----|--------|
-| `G` | Throttle (hold) |
-| `B` | Brake (hold) |
-| `Space` | Handbrake (hold, locks rear) |
-| `+` / `=` | Shift up |
-| `-` / `_` | Shift down |
-| `C` | Clutch (HOLD = open, RELEASE = engage) |
-| `I` | Ignition toggle (OFF <-> CRANKING -> RUNNING) |
-| `P` | Overboost (one-shot +15% torque, 8s) |
-| `R` | Reset all systems |
-| `Q` | Quit |
+| 按键 | 功能 |
+|------|------|
+| ↑ / W | 油门 |
+| ↓ / S | 刹车 |
+| ← / A | 左转 |
+| → / D | 右转 |
+| C | 离合 |
+| Space | 手刹 |
+| B | Overboost |
 
-## Push-Start / Bump-Start
-
-When the engine dies:
-1. Gain speed (>10 km/h) by rolling/pushing
-2. Shift to 1st or 2nd gear
-3. Release clutch `[C]`
-4. Wheels spin the engine - at ~500 RPM it auto-fires!
-
-## Local Development
+## 🚀 本地开发
 
 ```bash
-# Requires Node.js >= 5.8
 npm install
 npm start
-# Open http://localhost:8080
+# 浏览器打开 http://localhost:8080
 ```
 
-## GitHub Actions Auto-Build
+## 📦 GitHub Actions 自动编译 APK
 
-Push to `main` or `master` branch and the workflow will:
-1. Setup Node.js 5.8 + Java 8 (Zulu) + Java 17 (Temurin) + Android SDK
-2. Install Cordova 8.1.2
-3. Generate app icons and splash screens
-4. Build both **Debug** and **Release** APKs
-5. Upload artifacts (downloadable for 30 days)
-6. On git tag push: create a GitHub Release with all APKs
+1. 推送到 GitHub 仓库
+2. **Settings → Actions → General** → Workflow permissions = Read and write
+3. **Actions → Build Android APK → Run workflow**
+4. 等待 ~5-8 分钟
+5. 下载 Debug APK → 安装到 Android 4.4.4+ 设备
 
-### Manual workflow trigger
-Go to Actions → "Build Android APK" → "Run workflow"
+### Tag 触发自动发版
 
-### Build Environment Notes
-- **JDK 17 (Temurin)** — used for Android SDK command-line tools (`sdkmanager`, `aapt2`, `d8`)
-- **JDK 8 (Zulu)** — used for Cordova CLI and Gradle 4.x (Cordova-Android 8.x requirement)
-- **Node.js 5.8** — required by Cordova 8.x
-- **Android API 28** build-tools, min SDK 19 (Android 4.4.4+)
+```bash
+git tag v6.0.0 && git push origin v6.0.0
+```
 
-## Project Structure
+自动创建 GitHub Release 并附上 APK zip 包。
+
+## 🏗️ 技术栈
+
+| 层 | 技术 |
+|----|------|
+| 渲染 | HTML5 Canvas 256×256 |
+| 引擎 | 纯 JavaScript (无依赖) |
+| 构建 | Node.js 16 + Cordova 8.1.2 |
+| 编译 | Gradle 4.10.3 + Android SDK 28 |
+| CI/CD | GitHub Actions (ubuntu-22.04) |
+| JDK | 17 (SDK 工具) + 8 (Gradle 4.x) |
+
+## 📁 项目结构
 
 ```
 .
-├── index.html          # Main HTML with virtual keyboard
-├── game.js             # Complete game engine (physics + rendering)
-├── server.js           # Node.js dev server
-├── package.json        # Node.js project config
-├── config.xml          # Cordova/Android config
-├── .github/
-│   └── workflows/
-│       └── build-apk.yml  # GitHub Actions CI/CD
-└── README.md
+├── www/
+│   ├── index.html    # 256×256 画布 + 虚拟按键 UI
+│   └── game.js       # 完整游戏引擎
+├── server.js          # Node.js 本地开发服务器
+├── package.json       # npm 配置
+├── config.xml         # Cordova 配置
+└── .github/workflows/
+    └── build-apk.yml  # GitHub Actions 流水线
 ```
 
-## Vehicle Reference - Citroen ZX Kit Car
+## 📋 系统要求
 
-| Spec | Value |
-|------|-------|
-| Engine | PSA XU10 J4D/Z, 1998cc DOHC 16V |
-| Max Power | 255 PS @ 9000 rpm (187 kW) |
-| Peak Torque | 238 Nm @ 7600 rpm |
-| Compression | 12.0 : 1 |
-| Gearbox | 6-speed sequential + helical LSD |
-| Curb Weight | ~1010 kg |
-| FIA Class | Group A/7 (Kit Car / F2) |
-| Homologation | A 5468 |
+- Android 4.4.4 (API 19) 或更高
+- 触摸屏设备
+- 建议 1GB+ RAM
 
-## License
+## 🔧 故障排除
 
-MIT
+**APK 安装失败**: 确保 "未知来源" 已启用
+
+**游戏卡顿**: 关闭其他后台应用, 该游戏为 256×256 像素, 不应有性能问题
+
+**虚拟按键不响应**: 确保浏览器/WebView 未拦截触摸事件
+
+## 📄 License
+
+MIT License

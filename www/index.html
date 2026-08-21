@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Citroen ZX Kit Car Sim v6.0</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0a0a0a;
+    display: flex; justify-content: center; align-items: center;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #game-container {
+    position: relative;
+    width: 256px; height: 256px;
+  }
+  canvas#game {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    width: 256px; height: 256px;
+    display: block;
+    border: 1px solid #333;
+    background: #111;
+  }
+
+  /* ── 虚拟按键 ── */
+  .vbtn {
+    position: absolute;
+    display: flex; justify-content: center; align-items: center;
+    font-size: 9px; font-weight: bold; color: #fff;
+    border-radius: 4px; opacity: 0.82; z-index: 10;
+    border: 1px solid rgba(255,255,255,0.2);
+    transition: opacity 0.1s, transform 0.05s;
+  }
+  .vbtn:active, .vbtn.active { opacity: 1; transform: scale(0.93); }
+
+  /* 方向键区 (右侧) */
+  #btn-up    { right: -42px; top: 0;    width: 38px; height: 34px; background: #0a0; }
+  #btn-down  { right: -42px; top: 38px; width: 38px; height: 34px; background: #a00; }
+  #btn-left  { left: -42px;  top: 18px; width: 38px; height: 34px; background: #048; }
+  #btn-right { right: -42px; top: 76px; width: 38px; height: 34px; background: #048; }
+
+  /* 功能键区 (底部) */
+  #btn-clutch    { left: -42px;  bottom: 0; width: 38px; height: 28px; background: #a60; font-size: 7px; }
+  #btn-handbrake { right: -42px; bottom: 0; width: 38px; height: 28px; background: #606; font-size: 7px; }
+  #btn-boost     { bottom: -32px; left: 50%; transform: translateX(-50%); width: 48px; height: 28px; background: #d0d; font-size: 7px; }
+
+  /* 档位显示 */
+  #gear-display {
+    position: absolute; bottom: -50px; left: 0; right: 0;
+    text-align: center; color: #0f0; font-size: 10px;
+    text-shadow: 0 0 3px #0f0;
+  }
+
+  /* 启动画面 */
+  #splash {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: #1a1a2e; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; z-index: 100;
+    color: #0cc; font-size: 14px;
+  }
+  #splash .logo {
+    font-size: 20px; color: #ff0; text-shadow: 0 0 10px #ff0;
+    margin-bottom: 20px; text-align: center;
+  }
+  #splash .sub { font-size: 11px; color: #888; margin-top: 10px; }
+  #splash .progress {
+    width: 160px; height: 4px; background: #333; margin-top: 20px;
+    border-radius: 2px; overflow: hidden;
+  }
+  #splash .progress-bar {
+    width: 0%; height: 100%; background: #0cc;
+    transition: width 0.3s;
+  }
+</style>
+</head>
+<body>
+<div id="splash">
+  <div class="logo">🏁 CITROËN ZX<br>KIT CAR SIM</div>
+  <div>v6.0 — Rally Edition</div>
+  <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+  <div class="sub" id="splash-status">Loading...</div>
+</div>
+
+<div id="game-container">
+  <canvas id="game" width="256" height="256"></canvas>
+
+  <!-- 虚拟按键 -->
+  <div id="btn-up" class="vbtn">GAS</div>
+  <div id="btn-down" class="vbtn">BRK</div>
+  <div id="btn-left" class="vbtn">◀</div>
+  <div id="btn-right" class="vbtn">▶</div>
+  <div id="btn-clutch" class="vbtn">CLUTCH</div>
+  <div id="btn-handbrake" class="vbtn">H-BRAKE</div>
+  <div id="btn-boost" class="vbtn">OVERBOOST</div>
+
+  <div id="gear-display">N</div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
