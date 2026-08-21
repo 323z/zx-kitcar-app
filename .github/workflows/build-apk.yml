@@ -77,7 +77,6 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_17_X64"
           BIN=$ANDROID_HOME/cmdline-tools/tools/bin
           yes | "$BIN/sdkmanager" --licenses >/dev/null
-          # ✅ 关键：Build Tools 27.0.3 是 Cordova 8.1.0 的黄金版本
           "$BIN/sdkmanager" "platform-tools" "platforms;android-28" "build-tools;27.0.3"
 
       # ── 8. Cordova ─────────────────────────────
@@ -128,25 +127,19 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_8_X64"
           cordova platform add android@8.1.0
 
-      # ── 11. ✅ 彻底移除 bintray（不破坏语法）──
+      # ── 11. 彻底移除 bintray（不破坏语法）──
       - name: Remove bintray plugin safely
         working-directory: app/platforms/android
         run: |
-          # 删除整个 buildscript 依赖块中的 bintray 行
           sed -i '/com.jfrog.bintray.gradle:gradle-bintray-plugin/d' CordovaLib/build.gradle
           sed -i '/bintray/,/}/d' CordovaLib/build.gradle
-          # 删除 jcenter()
           find . -name "build.gradle" -exec sed -i 's/jcenter()//g' {} \;
-          echo "=== CordovaLib/build.gradle (cleaned) ==="
-          head -40 CordovaLib/build.gradle
 
       # ── 12. 强制使用系统 Gradle ───────────────
       - name: Force system Gradle
-        working-directory: app/platforms/android
+        working-directory: app/platforms)
         run: |
-          # 删除 wrapper，强制使用系统 gradle
           rm -rf gradle wrapper gradlew gradlew.bat
-          echo "✅ Removed gradle wrapper"
 
       # ── 13. Build Debug ─────────────────────────
       - name: Build Debug APK
@@ -181,11 +174,17 @@ jobs:
           find app/platforms/android -name "*.apk" -exec cp {} artifacts/ \;
           ls -la artifacts/
 
-      # ── 16. Upload ──────────────────────────────
-      - uses: actions/upload-artifact@v4
+      # ── 16. Upload Debug APK ────────────────────
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
         with:
           name: zx-kitcar-debug-apk
- - uses: actions/upload-artifact@v4
+          path: artifacts/*debug*.apk
+          if-no-files-found: warn
+
+      # ── 17. Upload Release APK ──────────────────
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
         with:
           name: zx-kitcar-release-apk
           path: artifacts/*release*.apk
