@@ -11,6 +11,7 @@ jobs:
 
     env:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      ANDROID_NDK_HOME: ""          # ✅ 消除 NDK 警告
 
     steps:
       # ── 1. Checkout ──────────────────────────────
@@ -21,9 +22,6 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Verify Node.js
-        run: node --version
-
       # ── 3. JDK 17 默认 (SDK 工具用) ──────────
       - name: Setup JDK 17
         uses: actions/setup-java@v5
@@ -31,55 +29,42 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Verify JDK 17
-        run: java -version
-
-      # ── 4. JDK 8 (Cordova/Gradle 用) ─────────
-      - name: Setup JDK 8
+      - name: Setup JDK 8 (Cordova build only)
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '8'
 
-      - name: Lock JAVA_HOME to 17 + save JDK8
+      - name: Lock JAVA_HOME + save JDK8
         run: |
           echo "JDK8_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
-          echo "✅ JDK8=$JAVA_HOME_8_X64"
-          echo "✅ JAVA_HOME=$JAVA_HOME_17_X64"
 
-      # ── 5. 安装 Gradle 4.10.3 (curl) ─────────
+      # ── 4. 安装 Gradle 4.10.3 ─────────────────
       - name: Install Gradle 4.10.3
         run: |
           cd /tmp
-          echo "⬇️ Downloading Gradle 4.10.3..."
           curl -fsSL -o gradle.zip https://services.gradle.org/distributions/gradle-4.10.3-bin.zip
-          echo "📦 Extracting..."
           sudo unzip -q gradle.zip -d /opt/
           rm gradle.zip
           echo "/opt/gradle-4.10.3/bin" >> $GITHUB_PATH
-          export PATH="/opt/gradle-4.10.3/bin:$PATH"
           gradle -v
 
-      # ── 6. 安装 Pillow ─────────────────────────
+      # ── 5. 安装 Pillow ─────────────────────────
       - name: Install Pillow
         run: pip install --quiet "Pillow==10.4.0"
 
-      # ── 7. Android SDK (curl) ─────────────────
+      # ── 6. Android SDK ─────────────────────────
       - name: Setup Android SDK
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export ANDROID_HOME=$HOME/android-sdk
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
-
-          echo "⬇️ Downloading cmdline-tools..."
           curl -fsSL -o cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
-          echo "📦 Extracting..."
           unzip -q cmdtools.zip
           mv cmdline-tools tools
           rm cmdtools.zip
-
           BIN=$ANDROID_HOME/cmdline-tools/tools/bin
           echo "$BIN" >> $GITHUB_PATH
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
@@ -93,7 +78,7 @@ jobs:
           yes | "$BIN/sdkmanager" --licenses >/dev/null
           "$BIN/sdkmanager" "platform-tools" "platforms;android-28" "build-tools;28.0.3"
 
-      # ── 8. Cordova ─────────────────────────────
+      # ── 7. Cordova ─────────────────────────────
       - name: Install Cordova
         run: npm install -g cordova@8.1.2
 
@@ -105,7 +90,7 @@ jobs:
           cp index.html app/www/ 2>/dev/null || true
           cp game.js app/www/ 2>/dev/null || true
 
-      # ── 9. 生成图标/启动屏 ────────────────────
+      # ── 8. 生成图标/启动屏 ────────────────────
       - name: Generate icons & splash
         working-directory: app
         run: |
@@ -134,187 +119,67 @@ jobs:
           print("Done!")
           PYEOF
 
-      # ── 10. Add Android platform ───────────────
+      # ── 9. Add Android platform ───────────────
       - name: Add Android platform
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
-          cordova platform add android@8.1.0 --verbose
-          echo "--- platforms/android/ ---"
-          ls -la platforms/android/
-          echo "--- wrapper check ---"
-          ls platforms/android/gradle/wrapper/ 2>/dev/null || echo "no wrapper dir"
-          ls platforms/android/gradlew 2>/dev/null || echo "no gradlew at root"
-          ls platforms/android/CordovaLib/ 2>/dev/null || true
+          cordova platform add android@8.1.0
 
-      # ── 11. Patch Gradle scripts (移除 jcenter) ─
-      - name: Patch Gradle build scripts
+      # ── 10. ✅ 只改 wrapper URL，不动 build.gradle ──
+      - name: Fix Gradle wrapper version only
         working-directory: app/platforms/android
         run: |
-          echo "=== Before patch ==="
-          cat CordovaLib/build.gradle 2>/dev/null | head -30 || true
-          # 注释 bintray 插件
-          find . -name "build.gradle" -exec sed -i 's/^.*bintray.*$/\/\/ REMOVED bintray plugin/' {} \;
-          # jcenter → mavenCentral + google
-          find . -name "build.gradle" -exec sed -i 's/jcenter()/mavenCentral()\ngoogle()/g' {} \;
-          find . -name "*.gradle" -exec sed -i 's/jcenter()/mavenCentral()\ngoogle()/g' {} \;
-          # 删除 bintray 依赖行
-          find . -name "build.gradle" -exec sed -i '/gradle-bintray-plugin/d' {} \;
-          echo "=== After patch ==="
-          cat CordovaLib/build.gradle 2>/dev/null | head -30 || true
-
-      # ── 12. Fix Gradle wrapper properties ───────
-      - name: Fix Gradle wrapper version
-        working-directory: app/platforms/android
-        run: |
-          # 修改所有 gradle-wrapper.properties
           find . -name "gradle-wrapper.properties" -exec sed -i \
             's|https://services.gradle.org/distributions/gradle-.*-bin.zip|https://services.gradle.org/distributions/gradle-4.10.3-bin.zip|g' {} \;
-          find . -name "gradle-wrapper.properties" -exec sed -i \
-            's/gradle-[0-9.]*\([a-z0-9]*\)\(-bin\)\?\.zip/gradle-4.10.3-bin.zip/g' {} \;
-          echo "=== wrapper files ==="
-          find . -name "gradle-wrapper.properties" -exec echo "--- {} ---" \; -exec cat {} \;
 
-      # ── 13. Create init.gradle ─────────────────
-      - name: Create init.gradle
-        run: |
-          sudo tee /opt/init.gradle > /dev/null << 'INITEOF'
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-                  maven { url "https://maven.google.com" }
-              }
-              buildscript {
-                  repositories {
-                      google()
-                      mavenCentral()
-                  }
-              }
-          }
-          INITEOF
-          cat /opt/init.gradle
-
-      # ── 14. Build Debug APK (via Cordova CLI) ──
+      # ── 11. Build Debug ─────────────────────────
       - name: Build Debug APK
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-4.10.3-bin.zip
-          export GRADLE_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=256m"
-
-          echo "=== 环境检查 ==="
-          which gradle
-          gradle --version
-          echo "JAVA_HOME=$JAVA_HOME"
-
-          echo "=== 开始构建 Debug ==="
           cordova build android --debug \
             -- --no-daemon \
-            --init-script /opt/init.gradle \
-            -Pandroid.useDeprecatedNdk=true \
             -PcdvMinSdkVersion=19 \
-            -PcdvTargetSdkVersion=28 2>&1 | tail -100
+            -PcdvTargetSdkVersion=28
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ── 15. Build Release APK ──────────────────
+      # ── 12. Build Release ───────────────────────
       - name: Build Release APK
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-4.10.3-bin.zip
-          export GRADLE_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=256m"
-
-          echo "=== 开始构建 Release ==="
           cordova build android --release \
             -- --no-daemon \
-            --init-script /opt/init.gradle \
-            -Pandroid.useDeprecatedNdk=true \
             -PcdvMinSdkVersion=19 \
-            -PcdvTargetSdkVersion=28 2>&1 | tail -100
+            -PcdvTargetSdkVersion=28
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ── 16. 定位 APK (多层搜索) ───────────────
+      # ── 13. 定位 APK ───────────────────────────
       - name: Locate and copy APKs
         run: |
           mkdir -p artifacts
-          echo "=== 全部 APK 搜索 ==="
-          find app -name "*.apk" 2>/dev/null | tee apk-list.txt
-
-          # 搜索所有可能的输出目录
-          for dir in \
-            "app/platforms/android/app/build/outputs/apk" \
-            "app/platforms/android/build/outputs/apk" \
-            "app/build/outputs/apk" \
-            "app/platforms/android/CordovaLib/build/outputs/apk"; do
-            if [ -d "$dir" ]; then
-              echo "--- $dir ---"
-              find "$dir" -name "*.apk" 2>/dev/null
-            fi
-          done
-
-          # Debug
-          DBG=$(find app -name "*debug*.apk" 2>/dev/null | head -1)
-          if [ -n "$DBG" ]; then
-            cp "$DBG" artifacts/zx-kitcar-sim-v6.0-debug.apk
-            echo "✅ Debug: $DBG"
-          else
-            echo "⚠️  No debug APK found"
-          fi
-
-          # Release
-          REL=$(find app -name "*release*.apk" 2>/dev/null | head -1)
-          if [ -n "$REL" ]; then
-            cp "$REL" artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
-            echo "✅ Release: $REL"
-          else
-            echo "⚠️  No release APK found"
-          fi
-
-          echo "=== artifacts/ ==="
+          DBG=$(find app -name "*debug*.apk" | head -1)
+          if [ -n "$DBG" ]; then cp "$DBG" artifacts/debug.apk; fi
+          REL=$(find app -name "*release*.apk" | head -1)
+          if [ -n "$REL" ]; then cp "$REL" artifacts/release-unsigned.apk; fi
           ls -la artifacts/
 
-      # ── 17. Upload Debug ───────────────────────
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
+      # ── 14. Upload ──────────────────────────────
+      - uses: actions/upload-artifact@v4
         with:
           name: zx-kitcar-debug-apk
-          path: artifacts/zx-kitcar-sim-v6.0-debug.apk
+          path: artifacts/debug.apk
           if-no-files-found: warn
 
-      # ── 18. Upload Release ────────────────────
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: zx-kitcar-release-apk
-          path: artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
+          path: artifacts/release-unsigned.apk
           if-no-files-found: warn
-
-      # ── 19. Diagnostic upload (always) ────────
-      - name: Upload build outputs (diagnostic)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-diagnostic
-          path: |
-            app/platforms/android/app/build/
-            app/platforms/android/build/
-            app/platforms/android/CordovaLib/build/
-          if-no-files-found: ignore
-
-      # ── 20. GitHub Release ─────────────────────
-      - name: Package for GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        run: cd artifacts && zip zx-kitcar-sim-v6.0-android.zip *.apk || true
-
-      - name: Upload to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/zx-kitcar-sim-v6.0-android.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
