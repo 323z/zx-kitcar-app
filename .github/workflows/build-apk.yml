@@ -17,10 +17,10 @@ jobs:
       # ── 1. Checkout ──────────────────────────────
       - uses: actions/checkout@v4
 
-      # ── 2. Node.js 18 ───────────────────────────
+      # ── 2. Node.js 14（关键！）──────────────────
       - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '14'
 
       # ── 3. JDK 17 (SDK 工具) ───────────────────
       - name: Setup JDK 17
@@ -41,14 +41,14 @@ jobs:
           echo "JDK8_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
 
-      # ── 5. 安装 Gradle 5.6.4（Cordova 9 官方配套） ─────────
-      - name: Install Gradle 5.6.4
+      # ── 5. 安装 Gradle 6.9.4 ───────────────────
+      - name: Install Gradle 6.9.4
         run: |
           cd /tmp
-          curl -fsSL -o gradle.zip https://services.gradle.org/distributions/gradle-5.6.4-bin.zip
+          curl -fsSL -o gradle.zip https://services.gradle.org/distributions/gradle-6.9.4-bin.zip
           sudo unzip -q gradle.zip -d /opt/
           rm gradle.zip
-          echo "/opt/gradle-5.6.4/bin" >> $GITHUB_PATH
+          echo "/opt/gradle-6.9.4/bin" >> $GITHUB_PATH
           gradle -v
 
       # ── 6. Pillow ──────────────────────────────
@@ -77,11 +77,11 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_17_X64"
           BIN=$ANDROID_HOME/cmdline-tools/tools/bin
           yes | "$BIN/sdkmanager" --licenses >/dev/null
-          "$BIN/sdkmanager" "platform-tools" "platforms;android-29" "build-tools;29.0.3"
+          "$BIN/sdkmanager" "platform-tools" "platforms;android-30" "build-tools;30.0.3"
 
-      # ── 8. Cordova 9 ────────────────────────────
+      # ── 8. Cordova 10 ───────────────────────────
       - name: Install Cordova
-        run: npm install -g cordova@9.0.0
+        run: npm install -g cordova@10.0.0
 
       - name: Init Cordova project
         run: |
@@ -120,23 +120,21 @@ jobs:
           print("Done!")
           PYEOF
 
-      # ── 10. Add Android platform ───────────────
+      # ── 10. Add Android platform（关键版本）────
       - name: Add Android platform
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
-          cordova platform add android@8.1.0
+          cordova platform add android@10.1.2
 
       # ── 11. Build Debug ─────────────────────────
       - name: Build Debug APK
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
-          export PATH="/opt/gradle-5.6.4/bin:$PATH"
+          export PATH="/opt/gradle-6.9.4/bin:$PATH"
           cordova build android --debug \
-            -- --no-daemon \
-            -PcdvMinSdkVersion=19 \
-            -PcdvTargetSdkVersion=29
+            -- --no-daemon
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
@@ -145,11 +143,9 @@ jobs:
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
-          export PATH="/opt/gradle-5.6.4/bin:$PATH"
+          export PATH="/opt/gradle-6.9.4/bin:$PATH"
           cordova build android --release \
-            -- --no-daemon \
-            -PcdvMinSdkVersion=19 \
-            -PcdvTargetSdkVersion=29
+            -- --no-daemon
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
