@@ -1,23 +1,36 @@
 {
   "name": "citroen-zx-kitcar-sim",
   "version": "6.0.0",
-  "description": "Citroen ZX Kit Car Rally Sim v6.0 — 256x256 virtual key racing sim for Android 4.4.4+",
+  "description": "Citroen ZX Kit Car Rally Simulator v6.0 with Push-Start - HTML5/Canvas port for Android",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "android:debug": "cordova build android --debug",
-    "android:release": "cordova build android --release"
+    "dev": "node server.js",
+    "cordova:prepare": "cordova prepare android",
+    "cordova:build": "cordova build android --release",
+    "cordova:run": "cordova run android"
   },
+  "keywords": [
+    "citroen",
+    "zx",
+    "kitcar",
+    "rally",
+    "simulator",
+    "racing",
+    "android",
+    "cordova"
+  ],
+  "author": "Ported from citroen_ZX_16V.cpp (C++/Windows original)",
+  "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=5.8.0"
   },
   "devDependencies": {
-    "cordova": "8.1.2",
-    "cordova-android": "8.1.0"
+    "cordova": "^8.1.2"
   },
   "cordova": {
     "platforms": [
-      "android"
+      "android@~8.1.0"
     ],
     "plugins": [
       "cordova-plugin-whitelist",

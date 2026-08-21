@@ -1,124 +1,99 @@
-# 🏁 Citroen ZX Kit Car Rally Sim v6.0
+# Citroen ZX Kit Car Rally Sim v6.0
 
-> A retro-style 256×256 pixel rally racing simulator with full telemetry,  
-> 6-speed sequential gearbox, push-start ignition, and overboost system.  
-> Runs in browser, packaged as Android APK (4.4.4+).
+A complete port of the C++ Windows console racing simulator to HTML5 Canvas + Node.js, packaged as an Android APK via Cordova.
 
----
+## Features
 
-## 🎮 Controls
+- **Full vehicle physics** ported from the original C++ codebase
+- **256x256 pixel canvas** - authentic retro aesthetic
+- **Virtual on-screen keyboard** for touch devices
+- **Push-Start / Bump-Start** - roll in gear, drop clutch to auto-fire the engine
+- **6-speed sequential gearbox** with realistic RPM matching
+- **Cooling system** with overheat limp mode and critical stall
+- **Overboost system** - +15% torque for 8 seconds, 25s cooldown
+- **0-100 km/h timer**
+- **Wheel slip/lock detection** with visual indicators
+- **Compatible with Android 4.4.4+** (API 19+)
 
-### Virtual Keys (on-screen)
-| Button | Action |
-|--------|--------|
-| `GAS` | Throttle |
-| `BRAKE` | Brake |
-| `CLUTCH` | Clutch pedal |
-| `◀` `▶` | Steer left / right |
-| `HB` | Handbrake (rear lock) |
-| `⚡` | Overboost (8s, 25s cooldown) |
-| `1`-`6` | Direct gear select |
-| `R` | Reverse |
-| `N` | Neutral |
+## Controls
 
-### Keyboard
 | Key | Action |
 |-----|--------|
-| `W` | Gas |
-| `S` | Brake |
-| `C` | Clutch |
-| `←` `→` | Steer |
-| `Space` | Handbrake |
-| `Shift` | Boost |
-| `Q` / `A` | Shift up / down |
-| `1`-`6` | Gear select |
-| `R` | Reverse |
-| `N` | Neutral |
+| `G` | Throttle (hold) |
+| `B` | Brake (hold) |
+| `Space` | Handbrake (hold, locks rear) |
+| `+` / `=` | Shift up |
+| `-` / `_` | Shift down |
+| `C` | Clutch (HOLD = open, RELEASE = engage) |
+| `I` | Ignition toggle (OFF <-> CRANKING -> RUNNING) |
+| `P` | Overboost (one-shot +15% torque, 8s) |
+| `R` | Reset all systems |
+| `Q` | Quit |
 
----
+## Push-Start / Bump-Start
 
-## 🔧 Push-Start Sequence
+When the engine dies:
+1. Gain speed (>10 km/h) by rolling/pushing
+2. Shift to 1st or 2nd gear
+3. Release clutch `[C]`
+4. Wheels spin the engine - at ~500 RPM it auto-fires!
 
-1. Clutch in + roll the car (or get a push)
-2. Speed > 2 m/s with clutch engaged
-3. After ~0.27s the engine fires at 1200 RPM
-
----
-
-## 🚀 Quick Start (Local Dev)
+## Local Development
 
 ```bash
+# Requires Node.js >= 5.8
 npm install
 npm start
 # Open http://localhost:8080
 ```
 
----
+## GitHub Actions Auto-Build
 
-## 📦 Build APK (GitHub Actions)
+Push to `main` or `master` branch and the workflow will:
+1. Setup Node.js 5.8 + Java 8 (Zulu) + Java 17 (Temurin) + Android SDK
+2. Install Cordova 8.1.2
+3. Generate app icons and splash screens
+4. Build both **Debug** and **Release** APKs
+5. Upload artifacts (downloadable for 30 days)
+6. On git tag push: create a GitHub Release with all APKs
 
-1. Push this repo to GitHub
-2. Go to **Actions → Build Android APK → Run workflow**
-3. Wait ~5-8 min → Download APK artifact
-4. Install on Android 4.4.4+ device
+### Manual workflow trigger
+Go to Actions → "Build Android APK" → "Run workflow"
 
-### Requirements (handled by CI)
-- Node.js 18 LTS
-- JDK 17 (SDK tools) + JDK 8 (Cordova/Gradle)
-- Android SDK cmdline-tools 11.0
-- Cordova 8.1.2 + Cordova-Android 8.1.0
+### Build Environment Notes
+- **JDK 17 (Temurin)** — used for Android SDK command-line tools (`sdkmanager`, `aapt2`, `d8`)
+- **JDK 8 (Zulu)** — used for Cordova CLI and Gradle 4.x (Cordova-Android 8.x requirement)
+- **Node.js 5.8** — required by Cordova 8.x
+- **Android API 28** build-tools, min SDK 19 (Android 4.4.4+)
 
----
-
-## 📁 Project Structure
-
-```
-citroen-zx-kitcar/
-├── index.html              # 256×256 canvas + virtual keys
-├── game.js                 # Full game engine (physics, render, input)
-├── server.js               # Node.js dev server
-├── package.json            # Node + Cordova deps
-├── config.xml              # Cordova Android config (API 19-28)
-├── README.md
-└── .github/workflows/
-    └── build-apk.yml       # GitHub Actions CI (single file)
-```
-
----
-
-## 🛠️ Tech Details
-
-| Component | Value |
-|-----------|-------|
-| Canvas | 256×256 px, pixelated rendering |
-| Physics tick | 50ms cap, requestAnimationFrame |
-| Torque curve | Gaussian, peak @ 4500 RPM |
-| Gearbox | 6-speed + R, sequential |
-| Boost | +30% torque, 8s duration, 25s cooldown |
-| Cooling | Dynamic fan @ 90°C, overheat @ 115°C |
-| 0-100 timer | Auto-starts above 5 km/h |
-
----
-
-## ⚙️ CI Pipeline (build-apk.yml)
+## Project Structure
 
 ```
-Checkout → Node 18 → Cordova 8.1.2
-→ JDK 17 (Temurin, default)
-→ JDK 8 (Zulu, saved as JDK8_HOME)
-→ Android SDK cmdline-tools 11.0
-→ Accept licenses + install SDK 28
-→ Generate icons/splash (Python PIL)
-→ cordova create + platform add android@8.1.0
-→ Copy www/ assets
-→ Build Debug APK (JDK 8)
-→ Build Release APK (JDK 8)
-→ Upload artifacts (upload-artifact@v4)
-→ On tag: GitHub Release (softprops/action-gh-release@v2)
+.
+├── index.html          # Main HTML with virtual keyboard
+├── game.js             # Complete game engine (physics + rendering)
+├── server.js           # Node.js dev server
+├── package.json        # Node.js project config
+├── config.xml          # Cordova/Android config
+├── .github/
+│   └── workflows/
+│       └── build-apk.yml  # GitHub Actions CI/CD
+└── README.md
 ```
 
----
+## Vehicle Reference - Citroen ZX Kit Car
 
-## 📜 License
+| Spec | Value |
+|------|-------|
+| Engine | PSA XU10 J4D/Z, 1998cc DOHC 16V |
+| Max Power | 255 PS @ 9000 rpm (187 kW) |
+| Peak Torque | 238 Nm @ 7600 rpm |
+| Compression | 12.0 : 1 |
+| Gearbox | 6-speed sequential + helical LSD |
+| Curb Weight | ~1010 kg |
+| FIA Class | Group A/7 (Kit Car / F2) |
+| Homologation | A 5468 |
 
-MIT License — do whatever you want, just don't blame me when you spin out.
+## License
+
+MIT

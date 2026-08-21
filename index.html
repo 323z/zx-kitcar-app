@@ -1,153 +1,141 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
 <title>Citroen ZX Kit Car Rally Sim v6.0</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    width: 100%; height: 100%;
-    background: #0a0a0a;
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  body {
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
     overflow: hidden;
     touch-action: none;
-    -webkit-user-select: none;
-    user-select: none;
-    font-family: 'Courier New', monospace;
   }
-  #gameWrapper {
+  #gameContainer {
     position: relative;
-    width: 100vw; height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    background: #000;
+    width: 256px;
+    height: 256px;
+    border: 2px solid #555;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
   }
-  canvas#gameCanvas {
+  canvas {
+    display: block;
     image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
-    width: 100vmin; height: 100vmin;
-    max-width: 512px; max-height: 512px;
-    background: #1a1a2e;
-    border: 2px solid #333;
-    touch-action: none;
   }
-  /* Virtual Key Overlay */
-  #vkeys {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    height: 38vh;
-    pointer-events: none;
-    display: flex; flex-direction: column;
-    justify-content: flex-end;
+  #title {
+    color: #0ff;
+    font-size: 10px;
+    margin-bottom: 4px;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+  #subtitle {
+    color: #888;
+    font-size: 8px;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  /* Virtual Keyboard */
+  #vkeyboard {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(4, 50px);
+    grid-gap: 4px;
     padding: 8px;
-  }
-  .vkey-row {
-    display: flex; justify-content: center; gap: 12px;
-    margin-bottom: 6px;
-    pointer-events: none;
+    background: #222;
+    border-radius: 8px;
+    border: 1px solid #444;
   }
   .vkey {
-    pointer-events: auto;
-    width: 64px; height: 64px;
-    border-radius: 50%;
-    border: 2px solid #888;
-    background: rgba(40,40,40,0.75);
-    color: #ddd;
-    font-size: 18px; font-weight: bold;
-    display: flex; align-items: center; justify-content: center;
-    touch-action: none;
+    width: 50px;
+    height: 40px;
+    border: 1px solid #666;
+    border-radius: 6px;
+    background: #333;
+    color: #eee;
+    font-size: 11px;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.1s;
     -webkit-tap-highlight-color: transparent;
-    transition: background 0.08s, border-color 0.08s;
   }
   .vkey:active, .vkey.active {
-    background: rgba(200,180,0,0.85);
-    border-color: #ff0;
-    color: #000;
+    background: #0a0;
+    color: #fff;
+    border-color: #0f0;
   }
-  .vkey.gear {
-    width: 52px; height: 52px;
-    font-size: 14px;
-    border-color: #666;
+  .vkey.boost:active, .vkey.boost.active { background: #a00; border-color: #f00; }
+  .vkey.ign:active, .vkey.ign.active { background: #aa0; border-color: #ff0; color: #000; }
+  .vkey.hb:active, .vkey.hb.active { background: #a0a; border-color: #f0f; }
+  .vkey.clutch:active, .vkey.clutch.active { background: #06a; border-color: #0af; }
+  .vkey.shift:active, .vkey.shift.active { background: #0aa; border-color: #0ff; }
+  #status {
+    color: #0f0;
+    font-size: 9px;
+    margin-top: 6px;
+    text-align: center;
+    min-height: 14px;
+    font-family: 'Courier New', monospace;
   }
-  .vkey.gear.active {
-    background: rgba(0,200,200,0.85);
-    border-color: #0ff;
+  #msgOverlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 256px; height: 256px;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.92);
+    color: #0ff;
+    font-size: 9px;
+    text-align: center;
+    line-height: 1.6;
+    z-index: 10;
+    padding: 10px;
   }
-  .vkey-wide {
-    width: 80px;
-  }
-  #hud-overlay {
-    position: absolute; top: 0; left: 0; right: 0;
-    padding: 6px 10px;
-    color: #0f0; font-size: 11px;
-    text-shadow: 0 0 2px #000;
-    pointer-events: none;
-    line-height: 1.4;
-  }
-  #start-screen {
-    position: absolute; top:0; left:0; right:0; bottom:0;
-    background: rgba(0,0,0,0.88);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    color: #fc0; z-index: 100;
-    pointer-events: auto;
-  }
-  #start-screen h1 { font-size: 20px; margin-bottom: 10px; text-align: center; }
-  #start-screen p { font-size: 12px; color: #aaa; margin: 4px 20px; text-align: center; }
-  #start-screen button {
-    margin-top: 16px; padding: 10px 28px;
-    font-size: 16px; font-weight: bold;
-    background: #fc0; color: #000; border: none; border-radius: 6px;
-    cursor: pointer;
-  }
-  #start-screen button:active { background: #ff0; }
+  #msgOverlay .big { font-size: 14px; color: #ff0; margin-bottom: 8px; }
+  #msgOverlay .med { font-size: 10px; color: #aaa; margin-top: 6px; }
+  #msgOverlay .hl { color: #0f0; }
+  #msgOverlay .warn { color: #f80; }
+  #msgOverlay .err { color: #f00; }
 </style>
 </head>
 <body>
-<div id="gameWrapper">
-  <canvas id="gameCanvas" width="256" height="256"></canvas>
-
-  <div id="hud-overlay">
-    <span id="hudGear">N</span> |
-    <span id="hudRPM">0</span> RPM |
-    <span id="hudSpeed">0</span> km/h |
-    <span id="hudTemp">70°</span> |
-    <span id="hudBoost">RDY</span> |
-    <span id="hudTime">0-100: --</span>
-  </div>
-
-  <div id="vkeys">
-    <div class="vkey-row">
-      <div class="vkey gear" data-key="gear1">1</div>
-      <div class="vkey gear" data-key="gear2">2</div>
-      <div class="vkey gear" data-key="gear3">3</div>
-      <div class="vkey gear" data-key="gear4">4</div>
-      <div class="vkey gear" data-key="gear5">5</div>
-      <div class="vkey gear" data-key="gear6">6</div>
-      <div class="vkey gear" data-key="gearR">R</div>
-    </div>
-    <div class="vkey-row">
-      <div class="vkey" data-key="left">◀</div>
-      <div class="vkey" data-key="handbrake">HB</div>
-      <div class="vkey" data-key="boost">⚡</div>
-      <div class="vkey" data-key="right">▶</div>
-    </div>
-    <div class="vkey-row">
-      <div class="vkey vkey-wide" data-key="clutch">CLUTCH</div>
-      <div class="vkey vkey-wide" data-key="brake">BRAKE</div>
-      <div class="vkey vkey-wide" data-key="gas">GAS</div>
-    </div>
-  </div>
-
-  <div id="start-screen">
-    <h1>🏁 CITROEN ZX KIT CAR<br>RALLY SIM v6.0</h1>
-    <p>256×256 像素 · 6速序列变速箱</p>
-    <p>Push-Start · Overboost · 拉力物理</p>
-    <p style="margin-top:8px;color:#888">虚拟按键 / 键盘均可操作</p>
-    <button id="startBtn">START ENGINE</button>
+<div id="title">CITROEN ZX KIT CAR - F2 RALLY SIM v6.0</div>
+<div id="subtitle">256x256 | Virtual Keys | Android 4.4.4+</div>
+<div id="gameContainer">
+  <canvas id="screen" width="256" height="256"></canvas>
+  <div id="msgOverlay">
+    <div class="big" id="ovTitle">READY</div>
+    <div id="ovBody"></div>
+    <div class="med" id="ovFoot"></div>
   </div>
 </div>
-
+<div id="status">Press [I] to start ignition | [G] throttle | [B] brake</div>
+<div id="vkeyboard">
+  <div class="vkey throttle" data-key="g">[G] Gas</div>
+  <div class="vkey brake" data-key="b">[B] Brk</div>
+  <div class="vkey hb" data-key="space">[Spc] HB</div>
+  <div class="vkey shift" data-key="=">[+] Up</div>
+  <div class="vkey shift" data-key="-">[-] Dn</div>
+  <div class="vkey clutch" data-key="c">[C] Clutch</div>
+  <div class="vkey ign" data-key="i">[I] Ign</div>
+  <div class="vkey boost" data-key="p">[P] Boost</div>
+  <div class="vkey" data-key="r" style="grid-column:span 2; width:104px; background:#530;">[R] Reset</div>
+  <div class="vkey" data-key="q" style="grid-column:span 2; width:104px; background:#335;">[Q] Quit</div>
+</div>
 <script src="game.js"></script>
 </body>
 </html>
