@@ -1,379 +1,239 @@
-# ============================================================
-#  Citroen ZX Kit Car Rally Sim v6.0 — GitHub Actions APK Build
-#  Target: Android 4.4.4+ (API 19)  |  Cordova 8.1.0
-#  Single YML file, all-in-one pipeline
-# ============================================================
-
 name: Build Android APK
 
 on:
   workflow_dispatch:
   push:
-    tags:
-      - 'v*'
-
-env:
-  ANDROID_API: "28"
-  ANDROID_BUILD_TOOLS: "28.0.3"
-  MIN_SDK: "19"
-  CORDOVA_VERSION: "8.1.2"
-  GRADLE_VERSION: "4.10.3"          # Cordova 8.1.0 兼容的 Gradle 版本
+    tags: ['v*']
 
 jobs:
   build:
-    runs-on: ubuntu-22.04            # 用 22.04 避免 Node 24 runner 的兼容问题
+    runs-on: ubuntu-latest
+
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
 
     steps:
-      # ── 1. Checkout ────────────────────────────────────────
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ── 2. Node.js 16 (Cordova 8.x 最稳定的 Node 版本) ────
-      - name: Setup Node.js 16
-        uses: actions/setup-node@v4
+      # ── Node.js 18 ───────────────────────────────
+      - uses: actions/setup-node@v4
         with:
-          node-version: '16'
+          node-version: '18'
 
-      - name: Verify Node.js
-        run: |
-          node --version
-          npm --version
-
-      # ── 3. JDK 17 (Android SDK 工具 + Gradle 需要) ────────
-      - name: Setup JDK 17 (for SDK tools & Gradle)
+      # ── JDK 17 默认 (SDK 工具用) ────────────────
+      - name: Setup JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Verify JDK 17
-        run: |
-          echo "JAVA_HOME_17=$JAVA_HOME_17_X64"
-          $JAVA_HOME_17_X64/bin/java -version
-
-      # ── 3b. JDK 8 (for Gradle 4.10.3 / Cordova build) ─────
-      - name: Setup JDK 8 (for Gradle 4.x)
+      # ── JDK 8 (Cordova/Gradle 用) ──────────────
+      - name: Setup JDK 8
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '8'
 
-      - name: Lock JAVA_HOME to JDK 17 + save JDK 8 path
+      - name: Lock JAVA_HOME + save JDK 8
         run: |
           echo "JDK8_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
-          echo "✅ JDK 8: $JAVA_HOME_8_X64"
-          echo "✅ JDK 17: $JAVA_HOME_17_X64"
 
-      # ── 4. 安装 Cordova (全局) ─────────────────────────────
-      - name: Install Cordova
-        run: |
-          npm install -g cordova@${{ env.CORDOVA_VERSION }} 2>&1 | tail -5
-          cordova --version
-
-      # ── 5. 安装 Gradle 4.10.3 (Cordova 8.1.0 官方配套) ───
+      # ── 安装 Gradle 4.10.3 ─────────────────────
       - name: Install Gradle 4.10.3
         run: |
-          wget -q https://services.gradle.org/distributions/gradle-${{ env.GRADLE_VERSION }}-bin.zip
-          unzip -q gradle-${{ env.GRADLE_VERSION }}-bin.zip -d $HOME/
-          rm gradle-${{ env.GRADLE_VERSION }}-bin.zip
-          echo "$HOME/gradle-${{ env.GRADLE_VERSION }}/bin" >> $GITHUB_PATH
-          echo "GRADLE_HOME=$HOME/gradle-${{ env.GRADLE_VERSION }}" >> $GITHUB_ENV
-          $HOME/gradle-${{ env.GRADLE_VERSION }}/bin/gradle --version
+          wget -q https://services.gradle.org/distributions/gradle-4.10.3-bin.zip
+          sudo unzip -q gradle-4.10.3-bin.zip -d /opt/
+          echo "/opt/gradle-4.10.3/bin" >> $GITHUB_PATH
+          export PATH="/opt/gradle-4.10.3/bin:$PATH"
+          gradle -v
+          rm gradle-4.10.3-bin.zip
 
-      # ── 6. Android SDK 手动安装 (用 JDK 17) ───────────────
+      # ── 安装 Pillow ──────────────────────────────
+      - name: Install Pillow
+        run: pip install --quiet "Pillow==10.4.0"
+
+      # ── Android SDK ──────────────────────────────
       - name: Setup Android SDK
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
-          export ANDROID_HOME="$HOME/android-sdk"
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          cd "$ANDROID_HOME/cmdline-tools"
-
-          # 下载 cmdline-tools 11.0 (最后一个支持 JDK 17 的稳定版)
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
           unzip -q commandlinetools-linux-10406996_latest.zip
           mv cmdline-tools tools
           rm commandlinetools-linux-10406996_latest.zip
-
-          BIN="$ANDROID_HOME/cmdline-tools/tools/bin"
+          BIN=$ANDROID_HOME/cmdline-tools/tools/bin
           echo "$BIN" >> $GITHUB_PATH
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
           export PATH="$BIN:$PATH"
-
-          echo "=== sdkmanager version ==="
           "$BIN/sdkmanager" --version
 
-      - name: Install Android SDK packages
+      - name: Install SDK packages
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
-          BIN="$ANDROID_HOME/cmdline-tools/tools/bin"
-          export PATH="$BIN:$PATH"
-          yes | "$BIN/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$BIN/sdkmanager" "platform-tools" "platforms;android-${{ env.ANDROID_API }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}"
-          echo "=== SDK packages installed ==="
-          "$BIN/sdkmanager" --list_installed 2>/dev/null || true
+          BIN=$ANDROID_HOME/cmdline-tools/tools/bin
+          yes | "$BIN/sdkmanager" --licenses >/dev/null
+          "$BIN/sdkmanager" "platform-tools" "platforms;android-28" "build-tools;28.0.3"
 
-      # ── 7. 安装 Pillow (Python 图标生成) ──────────────────
-      - name: Install Pillow
-        run: |
-          pip install --quiet "Pillow==10.4.0"
-          python3 -c "from PIL import Image; print('Pillow OK:', Image.__version__)"
+      # ── Cordova ─────────────────────────────────
+      - name: Install Cordova
+        run: npm install -g cordova@8.1.2
 
-      # ── 8. 初始化 Cordova 项目 ──────────────────────────────
       - name: Init Cordova project
         run: |
           cordova create app com.zxkitcar.sim ZX_KitCar_Sim
-          echo "=== Cordova project created ==="
-          ls -la app/
-
-      # ── 9. 复制 Web 资源 ───────────────────────────────────
-      - name: Copy web assets
-        run: |
           mkdir -p app/www
-          cp www/index.html app/www/
-          cp www/game.js app/www/
-          echo "=== app/www/ ==="
-          ls -la app/www/
-          echo "=== Verifying files ==="
-          test -f app/www/index.html && echo "✅ index.html OK" || (echo "❌ MISSING"; exit 1)
-          test -f app/www/game.js && echo "✅ game.js OK" || (echo "❌ MISSING"; exit 1)
+          cp www/* app/www/ 2>/dev/null || true
+          cp index.html app/www/ 2>/dev/null || true
+          cp game.js app/www/ 2>/dev/null || true
 
-      # ── 10. 生成图标和启动屏 ───────────────────────────────
-      - name: Generate icons & splash screens
+      # ── 生成图标/启动屏 ────────────────────────
+      - name: Generate icons & splash
         working-directory: app
         run: |
           mkdir -p res/icon/android res/screen/android
           python3 << 'PYEOF'
           from PIL import Image, ImageDraw
-
-          # --- Icons ---
-          sizes = {'ldpi': 36, 'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144}
-          for density, size in sizes.items():
-              img = Image.new('RGBA', (size, size), (26, 26, 26, 255))
-              d = ImageDraw.Draw(img)
-              m = size // 6
-              d.rounded_rectangle([m, size//3, size-m, size*2//3],
-                                  radius=size//8, fill=(200, 200, 0, 255))
-              cl, cr = size//3, size*2//3
-              d.polygon([(cl, size//3), (cr, size//3),
-                         (cr-size//8, m), (cl+size//8, m)],
-                        fill=(255, 255, 80, 255))
-              wr = size // 8
-              for wx in [size//4, size*3//4]:
-                  wy = size*2//3
-                  d.ellipse([wx-wr, wy-wr//2, wx+wr, wy+wr//2], fill=(30,30,30,255))
-                  d.ellipse([wx-wr//2, wy-wr//3, wx+wr//2, wy+wr//3], fill=(150,150,150,255))
-              fname = f"res/icon/android/{density}.png"
-              img.save(fname)
-              print(f'Icon: {fname} ({size}x{size})')
-
-          # --- Splash screens ---
-          specs = [('mdpi',320,480),('hdpi',480,800),('xhdpi',720,1280),('xxhdpi',1080,1920)]
-          for density, w, h in specs:
-              img = Image.new('RGBA', (w, h), (26, 26, 46, 255))
-              d = ImageDraw.Draw(img)
-              cx, cy = w//2, h//3
-              d.rounded_rectangle([cx-w//4, cy-h//8, cx+w//4, cy+h//8],
-                                  radius=h//16, fill=(0,200,200,255))
-              car_y = h//2; cw = w//3; cx0 = cx - cw//2
-              d.rounded_rectangle([cx0, car_y, cx0+cw, car_y+cw//3],
-                                  radius=cw//8, fill=(200,200,0,255))
-              d.polygon([(cx0+cw//4,car_y),(cx0+cw*3//4,car_y),
-                         (cx0+cw*5//8,car_y-cw//4),(cx0+cw*3//8,car_y-cw//4)],
-                        fill=(255,255,80,255))
-              for wx in [cx0+cw//4, cx0+cw*3//4]:
-                  r = cw//8
-                  d.ellipse([wx-r, car_y+cw//4-r, wx+r, car_y+cw//4+r], fill=(30,30,30,255))
-              d.rectangle([0, h*3//4, w, h], fill=(20,20,20,255))
-              fname = f"res/screen/android/splash-{density}.png"
-              img.save(fname)
-              print(f'Splash: {fname} ({w}x{h})')
+          sizes = {'ldpi':36,'mdpi':48,'hdpi':72,'xhdpi':96,'xxhdpi':144}
+          for d,s in sizes.items():
+              img=Image.new('RGBA',(s,s),(26,26,26,255)); dr=ImageDraw.Draw(img); m=s//6
+              dr.rounded_rectangle([m,s//3,s-m,s*2//3],radius=s//8,fill=(200,200,0,255))
+              dr.polygon([(s//3,s//3),(s*2//3,s//3),(s*2//3-s//8,m),(s//3+s//8,m)],fill=(255,255,80,255))
+              for wx in [s//4,s*3//4]:
+                  dr.ellipse([wx-s//8,s*2//3-s//16,wx+s//8,s*2//3+s//16],fill=(30,30,30,255))
+              img.save(f"res/icon/android/{d}.png")
+          for d,w,h in [('mdpi',320,480),('hdpi',480,800),('xhdpi',720,1280),('xxhdpi',1080,1920)]:
+              img=Image.new('RGBA',(w,h),(26,26,46,255)); dr=ImageDraw.Draw(img)
+              cx,cy=w//2,h//3
+              dr.rounded_rectangle([cx-w//4,cy-h//8,cx+w//4,cy+h//8],radius=h//16,fill=(0,200,200,255))
+              cw=w//3; cx0=cx-cw//2; cy2=h//2
+              dr.rounded_rectangle([cx0,cy2,cx0+cw,cy2+cw//3],radius=cw//8,fill=(200,200,0,255))
+              dr.polygon([(cx0+cw//4,cy2),(cx0+cw*3//4,cy2),(cx0+cw*5//8,cy2-cw//4),(cx0+cw*3//8,cy2-cw//4)],fill=(255,255,80,255))
+              for wx in [cx0+cw//4,cx0+cw*3//4]:
+                  r=cw//8; dr.ellipse([wx-r,cy2+cw//4-r,wx+r,cy2+cw//4+r],fill=(30,30,30,255))
+              dr.rectangle([0,h*3//4,w,h],fill=(20,20,20,255))
+              img.save(f"res/screen/android/splash-{d}.png")
           print("Done!")
           PYEOF
 
-      # ── 11. 验证资源文件 ───────────────────────────────────
-      - name: Verify resources
-        working-directory: app
-        run: |
-          echo "=== Icons ==="
-          ls -la res/icon/android/
-          echo "=== Splash ==="
-          ls -la res/screen/android/
-          echo "=== www ==="
-          ls -la www/
-          test -f res/icon/android/hdpi.png && echo "✅ hdpi.png OK" || (echo "❌ hdpi.png MISSING"; exit 1)
-
-      # ── 12. 添加 Android 平台 ──────────────────────────────
       - name: Add Android platform
         working-directory: app
-        run: |
-          cordova platform add android@8.1.0 2>&1 | tail -20
-          echo "=== Platforms ==="
-          cordova platform ls
+        run: cordova platform add android@8.1.0
 
-      # ── 13. 修复 Gradle 配置（强制使用 Gradle 4.10.3）─────
-      - name: Fix Gradle wrapper to use 4.10.3
-        working-directory: app
+      # ── ✅ 核心修复：Patch Gradle 脚本移除 jcenter/bintray ──
+      - name: Patch Gradle build scripts (remove jcenter/bintray)
+        working-directory: app/platforms/android
         run: |
-          # 确保 Cordova 使用我们安装的 Gradle 4.10.3 而不是系统 Gradle 9.7
-          # 方法：设置 CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL 指向本地
-          GRADLE_ZIP="$HOME/gradle-${{ env.GRADLE_VERSION }}-bin.zip"
-          if [ ! -f "$GRADLE_ZIP" ]; then
-            wget -q -O "$GRADLE_ZIP" https://services.gradle.org/distributions/gradle-${{ env.GRADLE_VERSION }}-bin.zip
+          echo "=== 修复前 CordovaLib/build.gradle ==="
+          head -20 CordovaLib/build.gradle 2>/dev/null || true
+
+          # 1. 注释掉 bintray 插件引用
+          find . -name "build.gradle" -exec sed -i 's/^.*bintray.*$/\/\/ REMOVED bintray plugin/' {} \;
+
+          # 2. 替换 jcenter() 为 mavenCentral() + google()
+          find . -name "build.gradle" -exec sed -i 's/jcenter()/mavenCentral()\ngoogle()/g' {} \;
+          find . -name "*.gradle" -exec sed -i 's/jcenter()/mavenCentral()\ngoogle()/g' {} \;
+
+          # 3. 移除 classpath bintray 依赖
+          find . -name "build.gradle" -exec sed -i '/gradle-bintray-plugin/d' {} \;
+
+          # 4. 在根 build.gradle 的 repositories 里确保有 google() + mavenCentral()
+          #    并对所有 project 都生效
+          cat > /tmp/init.gradle << 'INITEOF'
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+                  maven { url "https://maven.google.com" }
+              }
+          }
+          INITEOF
+
+          echo "=== 修复后 CordovaLib/build.gradle ==="
+          head -20 CordovaLib/build.gradle 2>/dev/null || true
+
+      # ── 强制 Gradle wrapper 版本 ───────────────
+      - name: Fix Gradle wrapper
+        working-directory: app/platforms/android
+        run: |
+          GW=gradle/wrapper/gradle-wrapper.properties
+          if [ -f "$GW" ]; then
+            sed -i 's/gradle-[0-9.]*-/gradle-4.10.3-/g' "$GW"
+            sed -i 's|https://services.gradle.org/distributions/gradle-.*-bin.zip|https://services.gradle.org/distributions/gradle-4.10.3-bin.zip|g' "$GW"
+            cat "$GW"
           fi
 
-          # 设置环境变量让 Cordova 使用正确版本的 Gradle
-          echo "CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=file://$GRADLE_ZIP" >> $GITHUB_ENV
-
-          # 同时修复 gradle-wrapper.properties
-          WRAPPER="platforms/android/gradle/wrapper/gradle-wrapper.properties"
-          if [ -f "$WRAPPER" ]; then
-            sed -i "s|distributionUrl=.*|distributionUrl=https\\\\://services.gradle.org/distributions/gradle-${{ env.GRADLE_VERSION }}-bin.zip|" "$WRAPPER"
-            echo "=== gradle-wrapper.properties ==="
-            cat "$WRAPPER"
-          fi
-
-      # ── 14. Build Debug APK (用 JDK 8 运行 Gradle) ────────
+      # ── Build Debug ─────────────────────────────
       - name: Build Debug APK
         working-directory: app
         run: |
-          # 关键：Gradle 4.10.3 需要 JDK 8
           export JAVA_HOME="$JAVA_HOME_8_X64"
-          export ANDROID_HOME="$HOME/android-sdk"
-          export ANDROID_SDK_ROOT="$HOME/android-sdk"
-          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/tools/bin:$PATH"
-
-          echo "=== Java version (should be 1.8) ==="
-          java -version
-
-          echo "=== Building Debug APK ==="
-          # 使用 --no-daemon 避免 daemon 缓存 JDK 版本问题
-          cordova build android --debug -- --no-daemon 2>&1 | tail -40
+          export PATH="/opt/gradle-4.10.3/bin:$PATH"
+          cd platforms/android
+          ./gradlew assembleDebug --no-daemon --init-script /tmp/init.gradle \
+            -Pandroid.useDeprecatedNdk=true 2>&1 | tail -50
         env:
-          JAVA_HOME: ${{ env.JAVA_HOME_8_X64 }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ── 15. Build Release APK ──────────────────────────────
+      # ── Build Release ───────────────────────────
       - name: Build Release APK
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
-          export ANDROID_HOME="$HOME/android-sdk"
-          export ANDROID_SDK_ROOT="$HOME/android-sdk"
-          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/tools/bin:$PATH"
-
-          echo "=== Building Release APK ==="
-          cordova build android --release -- --no-daemon 2>&1 | tail -40
+          export PATH="/opt/gradle-4.10.3/bin:$PATH"
+          cd platforms/android
+          ./gradlew assembleRelease --no-daemon --init-script /tmp/init.gradle \
+            -Pandroid.useDeprecatedNdk=true 2>&1 | tail -50
         env:
-          JAVA_HOME: ${{ env.JAVA_HOME_8_X64 }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ── 16. 定位并重命名 APK ───────────────────────────────
-      - name: Locate and rename APK files
-        working-directory: app
+      # ── 定位 APK ────────────────────────────────
+      - name: Locate and rename APKs
         run: |
-          mkdir -p $GITHUB_WORKSPACE/artifacts
-          echo "=== Searching for APKs ==="
-          find platforms/android -name "*.apk" -type f 2>/dev/null | while read f; do
-            echo "Found: $f ($(du -h "$f" | cut -f1))"
-          done
+          mkdir -p artifacts
+          echo "=== 查找所有 APK ==="
+          find app/platforms -name "*.apk" 2>/dev/null | tee apk-list.txt
 
-          # Copy and rename
-          SRC_DEBUG=$(find platforms/android -name "*debug.apk" -type f | head -1)
-          SRC_RELEASE=$(find platforms/android -name "*release*.apk" -not -name "*unaligned*" -type f | head -1)
-
-          if [ -n "$SRC_DEBUG" ]; then
-            cp "$SRC_DEBUG" $GITHUB_WORKSPACE/artifacts/zx-kitcar-sim-v6.0-debug.apk
-            echo "✅ Debug APK copied"
-          else
-            echo "⚠️ Debug APK not found"
+          DBG=$(find app/platforms -name "*debug*.apk" | head -1)
+          if [ -n "$DBG" ]; then
+            cp "$DBG" artifacts/zx-kitcar-sim-v6.0-debug.apk
+            echo "✅ Debug: $DBG"
           fi
 
-          if [ -n "$SRC_RELEASE" ]; then
-            cp "$SRC_RELEASE" $GITHUB_WORKSPACE/artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
-            echo "✅ Release APK copied"
-          else
-            echo "⚠️ Release APK not found"
+          REL=$(find app/platforms -name "*release*.apk" | head -1)
+          if [ -n "$REL" ]; then
+            cp "$REL" artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
+            echo "✅ Release: $REL"
           fi
 
-          echo "=== Artifacts ==="
-          ls -la $GITHUB_WORKSPACE/artifacts/
+          ls -la artifacts/
 
-      # ── 17. Upload Debug APK ───────────────────────────────
+      # ── Upload ───────────────────────────────────
       - name: Upload Debug APK
-        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zx-kitcar-sim-debug-apk
+          name: zx-kitcar-debug-apk
           path: artifacts/zx-kitcar-sim-v6.0-debug.apk
-          retention-days: 30
           if-no-files-found: warn
 
-      # ── 18. Upload Release APK ────────────────────────────
       - name: Upload Release APK
-        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zx-kitcar-sim-release-apk
+          name: zx-kitcar-release-apk
           path: artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
-          retention-days: 30
           if-no-files-found: warn
 
-      # ── 19. Tag 触发时发布到 GitHub Releases ──────────────
-      - name: Package for release
+      # ── GitHub Release ──────────────────────────
+      - name: Package for Release
         if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          cd artifacts
-          zip "Citroen-ZX-KitCar-Sim-v6.0-${{ github.ref_name }}.zip" \
-              zx-kitcar-sim-v6.0-debug.apk \
-              zx-kitcar-sim-v6.0-release-unsigned.apk 2>/dev/null || true
-          ls -la
+        run: cd artifacts && zip zx-kitcar-sim-v6.0-android.zip *.apk || true
 
-      - name: Publish to GitHub Releases
+      - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/Citroen-ZX-KitCar-Sim-v6.0-${{ github.ref_name }}.zip
-          name: Citroen ZX Kit Car Sim v6.0 ${{ github.ref_name }}
-          body: |
-            ## Citroen ZX Kit Car Rally Simulator v6.0
-
-            ### 📱 安装
-            - **Debug APK**: 可直接安装测试
-            - **Release APK**: 未签名发布版
-
-            ### 🎮 功能
-            - 256×256 像素画布
-            - 虚拟按键 (油门/刹车/转向/离合/手刹/Overboost)
-            - 完整物理引擎 (引擎扭矩/变速箱/冷却/增压)
-            - 兼容 Android 4.4.4+
-
-            ### 📋 系统要求
-            - Android 4.4.4 (API 19) 或更高
-            - 最小 1GB RAM
-            - 触摸屏设备
+          files: artifacts/zx-kitcar-sim-v6.0-android.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ── 20. 构建摘要 ──────────────────────────────────────
-      - name: Build Summary
-        if: always()
-        run: |
-          echo "============================================"
-          echo "  Citroen ZX Kit Car Rally Sim v6.0"
-          echo "  Build Complete!"
-          echo "============================================"
-          echo ""
-          echo "APK Files:"
-          ls -lh artifacts/ 2>/dev/null || echo "  (no artifacts found)"
-          echo ""
-          echo "Build Environment:"
-          echo "  Runner: ubuntu-22.04"
-          echo "  Node.js: $(node --version 2>/dev/null || echo 'N/A')"
-          echo "  JDK 17: $($JAVA_HOME_17_X64/bin/java -version 2>&1 | head -1 || echo 'N/A')"
-          echo "  JDK 8:  $($JAVA_HOME_8_X64/bin/java -version 2>&1 | head -1 || echo 'N/A')"
-          echo "  Gradle:  ${{ env.GRADLE_VERSION }}"
-          echo "  Cordova: ${{ env.CORDOVA_VERSION }}"
-          echo "  Android SDK: API ${{ env.ANDROID_API }}"
-          echo "  Build Tools: ${{ env.ANDROID_BUILD_TOOLS }}"
-          echo ""
-          echo "============================================"
