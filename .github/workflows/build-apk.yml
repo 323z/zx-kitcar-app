@@ -17,19 +17,19 @@ jobs:
       # ── 1. Checkout ──────────────────────────────
       - uses: actions/checkout@v4
 
-      # ── 2. Node.js 14（关键！）──────────────────
+      # ── 2. Node.js 14（Cordova 10 唯一兼容）────
       - uses: actions/setup-node@v4
         with:
           node-version: '14'
 
-      # ── 3. JDK 17 (SDK 工具) ───────────────────
+      # ── 3. JDK 17（SDK 工具）───────────────────
       - name: Setup JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # ── 4. JDK 8 (Cordova 构建) ───────────────
+      # ── 4. JDK 8（Cordova 构建）────────────────
       - name: Setup JDK 8
         uses: actions/setup-java@v5
         with:
@@ -41,7 +41,7 @@ jobs:
           echo "JDK8_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
 
-      # ── 5. 安装 Gradle 6.9.4 ───────────────────
+      # ── 5. 强制安装 Gradle 6.9.4（关键）────────
       - name: Install Gradle 6.9.4
         run: |
           cd /tmp
@@ -120,14 +120,20 @@ jobs:
           print("Done!")
           PYEOF
 
-      # ── 10. Add Android platform（关键版本）────
+      # ── 10. Add Android platform ───────────────
       - name: Add Android platform
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           cordova platform add android@10.1.2
 
-      # ── 11. Build Debug ─────────────────────────
+      # ── 11. 强制使用 Gradle 6.9.4（双保险）────
+      - name: Fix Gradle wrapper
+        working-directory: app/platforms/android
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-6.9.4-bin.zip|g' gradle/wrapper/gradle-wrapper.properties
+
+      # ── 12. Build Debug ─────────────────────────
       - name: Build Debug APK
         working-directory: app
         run: |
@@ -138,7 +144,7 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ── 12. Build Release ───────────────────────
+      # ── 13. Build Release ───────────────────────
       - name: Build Release APK
         working-directory: app
         run: |
@@ -149,14 +155,14 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ── 13. 定位 APK ───────────────────────────
+      # ── 14. 定位 APK ───────────────────────────
       - name: Locate APKs
         run: |
           mkdir -p artifacts
           find app -name "*.apk" -exec cp {} artifacts/ \;
           ls -la artifacts/
 
-      # ── 14. Upload Debug ───────────────────────
+      # ── 15. Upload Debug ───────────────────────
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -164,7 +170,7 @@ jobs:
           path: artifacts/*debug*.apk
           if-no-files-found: warn
 
-      # ── 15. Upload Release ────────────────────
+      # ── 16. Upload Release ────────────────────
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
