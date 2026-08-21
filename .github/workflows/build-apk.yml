@@ -3,8 +3,7 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
 
 jobs:
   build:
@@ -14,28 +13,19 @@ jobs:
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
 
     steps:
-      # ═════════════════════════════════════════════
-      # 1. Checkout
-      # ═════════════════════════════════════════════
+      # ── 1. Checkout ──────────────────────────────
       - uses: actions/checkout@v4
 
-      # ═════════════════════════════════════════════
-      # 2. Node.js 18 LTS
-      # ═════════════════════════════════════════════
-      - name: Setup Node.js 18
-        uses: actions/setup-node@v4
+      # ── 2. Node.js 18 ───────────────────────────
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
 
       - name: Verify Node.js
-        run: |
-          node --version
-          npm --version
+        run: node --version
 
-      # ═════════════════════════════════════════════
-      # 3. JDK 17 (default — for SDK tools)
-      # ═════════════════════════════════════════════
-      - name: Setup JDK 17 (Temurin)
+      # ── 3. JDK 17 默认 (SDK 工具用) ──────────
+      - name: Setup JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
@@ -44,32 +34,21 @@ jobs:
       - name: Verify JDK 17
         run: java -version
 
-      # ═════════════════════════════════════════════
-      # 4. JDK 8 (for Cordova / Gradle 4.x)
-      # ═════════════════════════════════════════════
-      - name: Setup JDK 8 (Zulu)
+      # ── 4. JDK 8 (Cordova/Gradle 用) ─────────
+      - name: Setup JDK 8
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '8'
 
-      - name: Save JDK8 path + lock JAVA_HOME to 17
+      - name: Lock JAVA_HOME to 17 + save JDK8
         run: |
           echo "JDK8_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
-          echo "✅ JDK8_HOME=$JAVA_HOME_8_X64"
+          echo "✅ JDK8=$JAVA_HOME_8_X64"
           echo "✅ JAVA_HOME=$JAVA_HOME_17_X64"
 
-      - name: Verify dual JDK
-        run: |
-          echo "--- JDK 17 (default) ---"
-          $JAVA_HOME_17_X64/bin/java -version
-          echo "--- JDK 8 (for build) ---"
-          $JAVA_HOME_8_X64/bin/java -version
-
-      # ═════════════════════════════════════════════
-      # 5. Install Gradle 4.10.3 (curl — always available)
-      # ═════════════════════════════════════════════
+      # ── 5. 安装 Gradle 4.10.3 (curl) ─────────
       - name: Install Gradle 4.10.3
         run: |
           cd /tmp
@@ -78,22 +57,15 @@ jobs:
           echo "📦 Extracting..."
           sudo unzip -q gradle.zip -d /opt/
           rm gradle.zip
-          ls /opt/gradle-4.10.3/bin/
           echo "/opt/gradle-4.10.3/bin" >> $GITHUB_PATH
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
           gradle -v
 
-      # ═════════════════════════════════════════════
-      # 6. Install Pillow
-      # ═════════════════════════════════════════════
+      # ── 6. 安装 Pillow ─────────────────────────
       - name: Install Pillow
-        run: |
-          pip install --quiet "Pillow==10.4.0"
-          python3 -c "from PIL import Image; print('✅ Pillow OK')"
+        run: pip install --quiet "Pillow==10.4.0"
 
-      # ═════════════════════════════════════════════
-      # 7. Android SDK (curl)
-      # ═════════════════════════════════════════════
+      # ── 7. Android SDK (curl) ─────────────────
       - name: Setup Android SDK
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
@@ -111,159 +83,99 @@ jobs:
           BIN=$ANDROID_HOME/cmdline-tools/tools/bin
           echo "$BIN" >> $GITHUB_PATH
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
           export PATH="$BIN:$PATH"
-
-          echo "--- sdkmanager version ---"
           "$BIN/sdkmanager" --version
 
       - name: Install SDK packages
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           BIN=$ANDROID_HOME/cmdline-tools/tools/bin
-          echo "⬇️ Installing SDK packages..."
-          yes | "$BIN/sdkmanager" --licenses >/dev/null 2>&1
+          yes | "$BIN/sdkmanager" --licenses >/dev/null
           "$BIN/sdkmanager" "platform-tools" "platforms;android-28" "build-tools;28.0.3"
-          echo "✅ SDK packages installed"
-          "$BIN/sdkmanager" --list_installed
 
-      # ═════════════════════════════════════════════
-      # 8. Cordova
-      # ═════════════════════════════════════════════
-      - name: Install Cordova 8.1.2
-        run: |
-          npm install -g cordova@8.1.2
-          cordova --version
+      # ── 8. Cordova ─────────────────────────────
+      - name: Install Cordova
+        run: npm install -g cordova@8.1.2
 
-      # ═════════════════════════════════════════════
-      # 9. Init Cordova project + copy web assets
-      # ═════════════════════════════════════════════
       - name: Init Cordova project
         run: |
           cordova create app com.zxkitcar.sim ZX_KitCar_Sim
           mkdir -p app/www
-          # Copy web assets
-          cp index.html app/www/ 2>/dev/null && echo "✅ index.html" || echo "⚠️ no index.html"
-          cp game.js app/www/ 2>/dev/null && echo "✅ game.js" || echo "⚠️ no game.js"
-          cp www/index.html app/www/ 2>/dev/null || true
-          cp www/game.js app/www/ 2>/dev/null || true
-          echo "--- app/www/ ---"
-          ls -la app/www/
+          cp www/* app/www/ 2>/dev/null || true
+          cp index.html app/www/ 2>/dev/null || true
+          cp game.js app/www/ 2>/dev/null || true
 
-      # ═════════════════════════════════════════════
-      # 10. Generate icons & splash screens
-      # ═════════════════════════════════════════════
+      # ── 9. 生成图标/启动屏 ────────────────────
       - name: Generate icons & splash
         working-directory: app
         run: |
           mkdir -p res/icon/android res/screen/android
           python3 << 'PYEOF'
           from PIL import Image, ImageDraw
-          import os
-
-          # --- Icons ---
           sizes = {'ldpi':36,'mdpi':48,'hdpi':72,'xhdpi':96,'xxhdpi':144}
           for d,s in sizes.items():
-              img=Image.new('RGBA',(s,s),(26,26,26,255))
-              dr=ImageDraw.Draw(img)
-              m=s//6
+              img=Image.new('RGBA',(s,s),(26,26,26,255)); dr=ImageDraw.Draw(img); m=s//6
               dr.rounded_rectangle([m,s//3,s-m,s*2//3],radius=s//8,fill=(200,200,0,255))
               dr.polygon([(s//3,s//3),(s*2//3,s//3),(s*2//3-s//8,m),(s//3+s//8,m)],fill=(255,255,80,255))
               for wx in [s//4,s*3//4]:
                   dr.ellipse([wx-s//8,s*2//3-s//16,wx+s//8,s*2//3+s//16],fill=(30,30,30,255))
-              fname=f"res/icon/android/{d}.png"
-              img.save(fname)
-              print(f"✅ Icon: {fname} ({s}x{s})")
-
-          # --- Splash screens ---
-          specs=[('mdpi',320,480),('hdpi',480,800),('xhdpi',720,1280),('xxhdpi',1080,1920)]
-          for d,w,h in specs:
-              img=Image.new('RGBA',(w,h),(26,26,46,255))
-              dr=ImageDraw.Draw(img)
+              img.save(f"res/icon/android/{d}.png")
+          for d,w,h in [('mdpi',320,480),('hdpi',480,800),('xhdpi',720,1280),('xxhdpi',1080,1920)]:
+              img=Image.new('RGBA',(w,h),(26,26,46,255)); dr=ImageDraw.Draw(img)
               cx,cy=w//2,h//3
               dr.rounded_rectangle([cx-w//4,cy-h//8,cx+w//4,cy+h//8],radius=h//16,fill=(0,200,200,255))
               cw=w//3; cx0=cx-cw//2; cy2=h//2
               dr.rounded_rectangle([cx0,cy2,cx0+cw,cy2+cw//3],radius=cw//8,fill=(200,200,0,255))
               dr.polygon([(cx0+cw//4,cy2),(cx0+cw*3//4,cy2),(cx0+cw*5//8,cy2-cw//4),(cx0+cw*3//8,cy2-cw//4)],fill=(255,255,80,255))
               for wx in [cx0+cw//4,cx0+cw*3//4]:
-                  r=cw//8
-                  dr.ellipse([wx-r,cy2+cw//4-r,wx+r,cy2+cw//4+r],fill=(30,30,30,255))
+                  r=cw//8; dr.ellipse([wx-r,cy2+cw//4-r,wx+r,cy2+cw//4+r],fill=(30,30,30,255))
               dr.rectangle([0,h*3//4,w,h],fill=(20,20,20,255))
-              fname=f"res/screen/android/splash-{d}.png"
-              img.save(fname)
-              print(f"✅ Splash: {fname} ({w}x{h})")
-
+              img.save(f"res/screen/android/splash-{d}.png")
           print("Done!")
           PYEOF
 
-          echo "--- app/res/ ---"
-          find res -name "*.png" | sort
-
-      # ═════════════════════════════════════════════
-      # 11. Add Android platform
-      # ═════════════════════════════════════════════
+      # ── 10. Add Android platform ───────────────
       - name: Add Android platform
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
-          echo "Adding android platform..."
-          cordova platform add android@8.1.0 --verbose 2>&1 | tail -30
+          cordova platform add android@8.1.0 --verbose
           echo "--- platforms/android/ ---"
           ls -la platforms/android/
-          echo "--- gradlew exists? ---"
-          test -f platforms/android/gradlew && echo "✅ gradlew found" || echo "❌ gradlew NOT found"
-          test -f platforms/android/gradlew && ls -la platforms/android/gradlew
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          echo "--- wrapper check ---"
+          ls platforms/android/gradle/wrapper/ 2>/dev/null || echo "no wrapper dir"
+          ls platforms/android/gradlew 2>/dev/null || echo "no gradlew at root"
+          ls platforms/android/CordovaLib/ 2>/dev/null || true
 
-      # ═════════════════════════════════════════════
-      # 12. Patch Gradle build scripts (remove jcenter/bintray)
-      # ═════════════════════════════════════════════
-      - name: Patch Gradle scripts (remove jcenter/bintray)
+      # ── 11. Patch Gradle scripts (移除 jcenter) ─
+      - name: Patch Gradle build scripts
         working-directory: app/platforms/android
         run: |
-          echo "=== BEFORE patch ==="
-          echo "--- Root build.gradle (first 30 lines) ---"
-          head -30 build.gradle 2>/dev/null || echo "(no root build.gradle)"
-          echo "--- CordovaLib/build.gradle (first 30 lines) ---"
-          head -30 CordovaLib/build.gradle 2>/dev/null || echo "(no CordovaLib/build.gradle)"
-
-          # Remove bintray plugin references
-          find . -name "build.gradle" -exec sed -i 's|^.*bintray.*$|// REMOVED bintray plugin|g' {} \;
-          # Replace jcenter() with mavenCentral() + google()
-          find . -name "build.gradle" -exec sed -i 's|jcenter()|mavenCentral()\ngoogle()|g' {} \;
-          find . -name "*.gradle" -exec sed -i 's|jcenter()|mavenCentral()\ngoogle()|g' {} \;
-          # Remove gradle-bintray-plugin classpath
+          echo "=== Before patch ==="
+          cat CordovaLib/build.gradle 2>/dev/null | head -30 || true
+          # 注释 bintray 插件
+          find . -name "build.gradle" -exec sed -i 's/^.*bintray.*$/\/\/ REMOVED bintray plugin/' {} \;
+          # jcenter → mavenCentral + google
+          find . -name "build.gradle" -exec sed -i 's/jcenter()/mavenCentral()\ngoogle()/g' {} \;
+          find . -name "*.gradle" -exec sed -i 's/jcenter()/mavenCentral()\ngoogle()/g' {} \;
+          # 删除 bintray 依赖行
           find . -name "build.gradle" -exec sed -i '/gradle-bintray-plugin/d' {} \;
+          echo "=== After patch ==="
+          cat CordovaLib/build.gradle 2>/dev/null | head -30 || true
 
-          echo "=== AFTER patch ==="
-          echo "--- Root build.gradle (first 30 lines) ---"
-          head -30 build.gradle 2>/dev/null || true
-          echo "--- CordovaLib/build.gradle (first 30 lines) ---"
-          head -30 CordovaLib/build.gradle 2>/dev/null || true
-
-      # ═════════════════════════════════════════════
-      # 13. Fix Gradle wrapper version
-      # ═════════════════════════════════════════════
-      - name: Fix Gradle wrapper to 4.10.3
+      # ── 12. Fix Gradle wrapper properties ───────
+      - name: Fix Gradle wrapper version
         working-directory: app/platforms/android
         run: |
-          GW=gradle/wrapper/gradle-wrapper.properties
-          if [ -f "$GW" ]; then
-            echo "=== Before ==="
-            cat "$GW"
-            sed -i 's|gradle-[0-9.]*-\|gradle-4.10.3-|g' "$GW"
-            sed -i 's|https://services.gradle.org/distributions/gradle-.*-bin.zip|https://services.gradle.org/distributions/gradle-4.10.3-bin.zip|g' "$GW"
-            echo "=== After ==="
-            cat "$GW"
-          else
-            echo "⚠️ No gradle-wrapper.properties found at $GW"
-            find . -name "gradle-wrapper.properties" 2>/dev/null
-          fi
+          # 修改所有 gradle-wrapper.properties
+          find . -name "gradle-wrapper.properties" -exec sed -i \
+            's|https://services.gradle.org/distributions/gradle-.*-bin.zip|https://services.gradle.org/distributions/gradle-4.10.3-bin.zip|g' {} \;
+          find . -name "gradle-wrapper.properties" -exec sed -i \
+            's/gradle-[0-9.]*\([a-z0-9]*\)\(-bin\)\?\.zip/gradle-4.10.3-bin.zip/g' {} \;
+          echo "=== wrapper files ==="
+          find . -name "gradle-wrapper.properties" -exec echo "--- {} ---" \; -exec cat {} \;
 
-      # ═════════════════════════════════════════════
-      # 14. Create init.gradle (force repositories)
-      # ═════════════════════════════════════════════
+      # ── 13. Create init.gradle ─────────────────
       - name: Create init.gradle
         run: |
           sudo tee /opt/init.gradle > /dev/null << 'INITEOF'
@@ -272,29 +184,32 @@ jobs:
                   google()
                   mavenCentral()
                   maven { url "https://maven.google.com" }
-                  maven { url "https://plugins.gradle.org/m2/" }
+              }
+              buildscript {
+                  repositories {
+                      google()
+                      mavenCentral()
+                  }
               }
           }
           INITEOF
           cat /opt/init.gradle
 
-      # ═════════════════════════════════════════════
-      # 15. Build Debug APK (via cordova, not gradlew directly)
-      # ═════════════════════════════════════════════
+      # ── 14. Build Debug APK (via Cordova CLI) ──
       - name: Build Debug APK
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-4.10.3-bin.zip
+          export GRADLE_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=256m"
 
-          echo "=== Environment ==="
+          echo "=== 环境检查 ==="
+          which gradle
+          gradle --version
           echo "JAVA_HOME=$JAVA_HOME"
-          echo "PATH=$PATH" | tr ':' '\n' | head -10
-          java -version
-          gradle -v 2>/dev/null || true
 
-          echo "=== Building Debug APK ==="
+          echo "=== 开始构建 Debug ==="
           cordova build android --debug \
             -- --no-daemon \
             --init-script /opt/init.gradle \
@@ -304,17 +219,16 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ═════════════════════════════════════════════
-      # 16. Build Release APK
-      # ═════════════════════════════════════════════
+      # ── 15. Build Release APK ──────────────────
       - name: Build Release APK
         working-directory: app
         run: |
           export JAVA_HOME="$JAVA_HOME_8_X64"
           export PATH="/opt/gradle-4.10.3/bin:$PATH"
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-4.10.3-bin.zip
+          export GRADLE_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=256m"
 
-          echo "=== Building Release APK ==="
+          echo "=== 开始构建 Release ==="
           cordova build android --release \
             -- --no-daemon \
             --init-script /opt/init.gradle \
@@ -324,47 +238,47 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      # ═════════════════════════════════════════════
-      # 17. Locate and copy APKs (multi-path search)
-      # ═════════════════════════════════════════════
+      # ── 16. 定位 APK (多层搜索) ───────────────
       - name: Locate and copy APKs
         run: |
           mkdir -p artifacts
+          echo "=== 全部 APK 搜索 ==="
+          find app -name "*.apk" 2>/dev/null | tee apk-list.txt
 
-          echo "=== ALL APK files ==="
-          find app -name "*.apk" 2>/dev/null | tee /tmp/all-apks.txt
-          echo ""
-          echo "=== Build output dirs ==="
-          ls -la app/platforms/android/app/build/outputs/apk/ 2>/dev/null || true
-          ls -la app/platforms/android/build/outputs/apk/ 2>/dev/null || true
+          # 搜索所有可能的输出目录
+          for dir in \
+            "app/platforms/android/app/build/outputs/apk" \
+            "app/platforms/android/build/outputs/apk" \
+            "app/build/outputs/apk" \
+            "app/platforms/android/CordovaLib/build/outputs/apk"; do
+            if [ -d "$dir" ]; then
+              echo "--- $dir ---"
+              find "$dir" -name "*.apk" 2>/dev/null
+            fi
+          done
 
-          # Debug APK
-          DBG=$(find app -name "*debug*" -name "*.apk" 2>/dev/null | head -1)
+          # Debug
+          DBG=$(find app -name "*debug*.apk" 2>/dev/null | head -1)
           if [ -n "$DBG" ]; then
             cp "$DBG" artifacts/zx-kitcar-sim-v6.0-debug.apk
-            echo "✅ Debug APK: $DBG → artifacts/"
+            echo "✅ Debug: $DBG"
           else
-            echo "⚠️ No debug APK found, trying broader search..."
-            find / -name "*debug*.apk" 2>/dev/null | head -5
+            echo "⚠️  No debug APK found"
           fi
 
-          # Release APK
-          REL=$(find app -name "*release*" -name "*.apk" 2>/dev/null | head -1)
+          # Release
+          REL=$(find app -name "*release*.apk" 2>/dev/null | head -1)
           if [ -n "$REL" ]; then
             cp "$REL" artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
-            echo "✅ Release APK: $REL → artifacts/"
+            echo "✅ Release: $REL"
           else
-            echo "⚠️ No release APK found, trying broader search..."
-            find / -name "*release*.apk" 2>/dev/null | head -5
+            echo "⚠️  No release APK found"
           fi
 
-          echo ""
           echo "=== artifacts/ ==="
           ls -la artifacts/
 
-      # ═════════════════════════════════════════════
-      # 18. Upload Debug APK
-      # ═════════════════════════════════════════════
+      # ── 17. Upload Debug ───────────────────────
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -372,9 +286,7 @@ jobs:
           path: artifacts/zx-kitcar-sim-v6.0-debug.apk
           if-no-files-found: warn
 
-      # ═════════════════════════════════════════════
-      # 19. Upload Release APK
-      # ═════════════════════════════════════════════
+      # ── 18. Upload Release ────────────────────
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
@@ -382,59 +294,22 @@ jobs:
           path: artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk
           if-no-files-found: warn
 
-      # ═════════════════════════════════════════════
-      # 20. Diagnostic upload (always, even on failure)
-      # ═════════════════════════════════════════════
-      - name: Upload diagnostic build outputs
+      # ── 19. Diagnostic upload (always) ────────
+      - name: Upload build outputs (diagnostic)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: diagnostic-build-outputs
+          name: build-diagnostic
           path: |
             app/platforms/android/app/build/
             app/platforms/android/build/
             app/platforms/android/CordovaLib/build/
-            /tmp/all-apks.txt
           if-no-files-found: ignore
 
-      # ═════════════════════════════════════════════
-      # 21. Build summary
-      # ═════════════════════════════════════════════
-      - name: Build summary
-        if: always()
-        run: |
-          echo "============================================"
-          echo "  Citroen ZX Kit Car Rally Sim v6.0"
-          echo "  Build Summary"
-          echo "============================================"
-          echo ""
-          echo "--- APK files found ---"
-          find app -name "*.apk" 2>/dev/null || echo "(none)"
-          echo ""
-          echo "--- artifacts/ ---"
-          ls -la artifacts/ 2>/dev/null || echo "(empty)"
-          echo ""
-          echo "--- Build status ---"
-          if [ -f artifacts/zx-kitcar-sim-v6.0-debug.apk ]; then
-            echo "✅ Debug APK: READY"
-          else
-            echo "❌ Debug APK: MISSING"
-          fi
-          if [ -f artifacts/zx-kitcar-sim-v6.0-release-unsigned.apk ]; then
-            echo "✅ Release APK: READY"
-          else
-            echo "❌ Release APK: MISSING"
-          fi
-
-      # ═════════════════════════════════════════════
-      # 22. GitHub Release (tag only)
-      # ═════════════════════════════════════════════
+      # ── 20. GitHub Release ─────────────────────
       - name: Package for GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          cd artifacts
-          zip zx-kitcar-sim-v6.0-android.zip *.apk 2>/dev/null || true
-          ls -la zx-kitcar-sim-v6.0-android.zip 2>/dev/null
+        run: cd artifacts && zip zx-kitcar-sim-v6.0-android.zip *.apk || true
 
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
